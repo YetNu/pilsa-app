@@ -196,7 +196,7 @@ async function renderStatus(){
       const isFuture = d > today;
       let cls = "", mark = "-";
       if (!isFuture && dayIndex !== null){
-        mark = done ? "완료" : "미완료";
+        mark = done ? "⭕" : "❌";
         cls = done ? "is-done" : "is-fail";
       }
       return `<td class="${cls}">${mark}</td>`;
@@ -230,6 +230,16 @@ function calcProgressPct(userName, today, submissions, startDate, totalChapters)
 /* ===========================================================
    내 필사 (주간 박스)
    =========================================================== */
+// 좁은 표 칸에서 "로마서13~14장"처럼 어색하게 줄바꿈되는 걸 막기 위해,
+// 책 이름과 장 번호를 의도한 지점에서 줄바꿈해서 보여주는 HTML 버전
+function formatAssignmentLabelHTML(pair){
+  if (pair.length === 0) return "-";
+  if (pair.length === 1) return `${pair[0].book}<br>${pair[0].chapter}장`;
+  const [a, b] = pair;
+  if (a.book === b.book) return `${a.book}<br>${a.chapter}~${b.chapter}장`;
+  return `${a.book}${a.chapter}장,<br>${b.book}${b.chapter}장`;
+}
+
 function getWeekDates(offset){
   // 이번 주 일요일부터 토요일까지 7일 (offset주 이동)
   const now = new Date();
@@ -273,7 +283,7 @@ async function renderWeek(){
     const dayIndex = dateToDayIndex(d, startDate);
     const isFuture = d > today; // 요일이 되기 전엔 타이핑 불가
     const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
-    const label = pair.length ? formatAssignmentLabel(pair) : "-";
+    const label = pair.length ? formatAssignmentLabelHTML(pair) : "-";
 
     if (!pair.length){
       chapRow.push(`<td>-</td>`);
@@ -284,7 +294,7 @@ async function renderWeek(){
     } else {
       const done = !!mySub[dayIndex];
       chapRow.push(`<td data-day-index="${dayIndex}" data-date="${d}">${label}</td>`);
-      doneRow.push(`<td class="${done ? "is-done" : "is-fail"}">${done ? "완료" : "미완료"}</td>`);
+      doneRow.push(`<td class="${done ? "is-done" : "is-fail"}">${done ? "⭕" : "❌"}</td>`);
     }
   });
 
