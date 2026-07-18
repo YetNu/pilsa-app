@@ -71,7 +71,7 @@
           <tbody>
             <tr class="row-day"><th>요일</th></tr>
             <tr class="row-chapter"><th>필사</th></tr>
-            <tr class="row-done"><th>완료여부</th></tr>
+            <tr class="row-done"><th>완료</th></tr>
           </tbody>
         </table>
       </div>
@@ -85,10 +85,11 @@
         </div>
 
         <div class="pilsa-panel__typing" id="typing-area">
-          <!-- JS가 절번호/절/내용 세트를 동적으로 생성 -->
+          <textarea id="typing-textarea" class="typing-textarea" rows="10"
+            placeholder="원문처럼 한 줄에 '절번호 내용'을 입력하세요.&#10;예) 1 예수 그리스도의 종 바울은 사도로 부르심을 받아..."></textarea>
         </div>
 
-        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가)</p>
+        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가). 한 줄에 절 번호와 내용을 원문처럼 이어서 입력하세요.</p>
 
         <div class="pilsa-panel__actions">
           <button class="btn btn--ghost" id="btn-cancel">닫기</button>
@@ -105,6 +106,7 @@
         <button class="tabs__btn is-active" data-admin-tab="pending">승인 대기</button>
         <button class="tabs__btn" data-admin-tab="members">전체 회원</button>
         <button class="tabs__btn" data-admin-tab="assign">성경 장 배정</button>
+        <button class="tabs__btn" data-admin-tab="content">본문 입력</button>
       </div>
 
       <div class="admin-panel" id="admin-pending"></div>
@@ -116,6 +118,21 @@
         <button class="btn btn--primary" id="btn-assign-save">배정 계산하기</button>
         <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 2장씩 자동 배정됩니다.</p>
         <div id="assign-preview"></div>
+      </div>
+      <div class="admin-panel" id="admin-content" hidden>
+        <div class="content-picker">
+          <label>책
+            <select id="content-book"></select>
+          </label>
+          <label>장
+            <input type="number" id="content-chapter" min="1" value="1">
+          </label>
+          <button class="btn btn--ghost" id="btn-content-load">불러오기</button>
+        </div>
+        <textarea id="content-textarea" class="typing-textarea" rows="14"
+          placeholder="한 줄에 '절번호 내용'을 입력하세요.&#10;예) 1 예수 그리스도의 종 바울은 사도로 부르심을 받아..."></textarea>
+        <p class="form-note" id="content-status"></p>
+        <button class="btn btn--primary" id="btn-content-save">저장하기</button>
       </div>
     </section>
 

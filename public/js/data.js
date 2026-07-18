@@ -52,15 +52,6 @@ function formatAssignmentLabel(pair){
   return `${a.book}${a.chapter}장, ${b.book}${b.chapter}장`;
 }
 
-/* 데모용 원문 텍스트 (실서비스에서는 Google Sheets에 저장된 개역한글 본문으로 교체) */
-function getSampleVerses(book, chapter){
-  const count = 6 + ((book.length + chapter) % 5); // 데모용 3~10절
-  return Array.from({ length: count }, (_, i) => ({
-    verse: i + 1,
-    text: `(샘플 본문) ${book} ${chapter}장 ${i + 1}절 — 실제 서비스에서는 이 자리에 개역한글 원문이 표시됩니다.`
-  }));
-}
-
 /* YYYY-MM-DD 문자열 유틸 */
 function toISODate(d){ return d.toISOString().slice(0, 10); }
 function addDays(dateStr, n){
@@ -74,7 +65,7 @@ function addDays(dateStr, n){
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     EPISTLES, CHAPTER_SEQUENCE, buildChapterSequence,
-    getAssignmentForDayIndex, formatAssignmentLabel, getSampleVerses,
+    getAssignmentForDayIndex, formatAssignmentLabel,
     toISODate, addDays,
   };
 }

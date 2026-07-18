@@ -144,8 +144,7 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
 function hasUnsavedTyping(){
   const panel = document.getElementById("pilsa-panel");
   if (panel.hidden) return false;
-  return [...document.querySelectorAll("#typing-area .typing-row")]
-    .some(row => row.querySelector(".row-verse").value.trim() || row.querySelector(".row-content").value.trim());
+  return document.getElementById("typing-textarea").value.trim().length > 0;
 }
 function confirmLeaveTyping(){
   if (!hasUnsavedTyping()) return true;
@@ -267,7 +266,7 @@ async function renderWeek(){
 
   const dayRow = [`<th>요일</th>`];
   const chapRow = [`<th>필사</th>`];
-  const doneRow = [`<th>완료여부</th>`];
+  const doneRow = [`<th>완료</th>`];
 
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
@@ -349,19 +348,41 @@ document.getElementById("btn-jump-oldest").addEventListener("click", async () =>
 function startOfWeek(d){ const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }
 
 /* ---------- 필사 패널 (본문 + 타이핑) ---------- */
-function openPilsaPanel(dayIndex, dateStr){
+async function openPilsaPanel(dayIndex, dateStr){
   const pair = getAssignmentForDayIndex(dayIndex);
-  openAssignment = { dayIndex, pair };
+  openAssignment = { dayIndex, pair, verses: [] };
 
   document.getElementById("pilsa-panel__title").textContent = formatAssignmentLabel(pair);
-  const verses = pair.flatMap(p => getSampleVerses(p.book, p.chapter).map(v => ({ ...v, book: p.book, chapter: p.chapter })));
+  document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  document.getElementById("typing-area").hidden = true;
+  document.getElementById("btn-submit").disabled = true;
+  buildTypingArea();
+  document.getElementById("pilsa-panel").hidden = false;
+  document.getElementById("pilsa-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+
+  let verses;
+  try {
+    const results = await Promise.all(
+      pair.map(p => api(`/chapters?book=${encodeURIComponent(p.book)}&chapter=${p.chapter}`))
+    );
+    verses = results.flatMap((r, i) => r.verses.map(v => ({ ...v, book: pair[i].book, chapter: pair[i].chapter })));
+  } catch (err) {
+    document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-error">${err.message}</p>`;
+    return;
+  }
+
+  if (!verses.length){
+    document.getElementById("pilsa-panel__text").innerHTML =
+      `<p class="form-note">아직 관리자가 이 날짜의 본문을 등록하지 않았어요.</p>`;
+    return;
+  }
+
   document.getElementById("pilsa-panel__text").innerHTML =
     verses.map(v => `<div>${v.chapter}:${v.verse} ${v.text}</div>`).join("");
 
   openAssignment.verses = verses;
-  buildTypingArea();
-  document.getElementById("pilsa-panel").hidden = false;
-  document.getElementById("pilsa-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("typing-area").hidden = false;
+  document.getElementById("btn-submit").disabled = false;
 }
 
 document.getElementById("btn-cancel").addEventListener("click", () => {
@@ -370,63 +391,28 @@ document.getElementById("btn-cancel").addEventListener("click", () => {
 });
 
 function buildTypingArea(){
-  const area = document.getElementById("typing-area");
-  area.innerHTML = "";
-  addTypingRow();
+  const textarea = document.getElementById("typing-textarea");
+  textarea.value = "";
+  textarea.focus();
 }
 
-function addTypingRow(){
-  const area = document.getElementById("typing-area");
-  const row = document.createElement("div");
-  row.className = "typing-row";
-  row.innerHTML = `
-    <input type="text" class="row-verse" placeholder="번호">
-    <span class="typing-row__label">절</span>
-    <input type="text" class="row-content" placeholder="내용을 직접 타이핑하세요">`;
-  area.appendChild(row);
+// 복사·붙여넣기 금지 (한 번만 등록하면 됨 — textarea는 매번 새로 만들지 않고 값만 비움)
+document.getElementById("typing-textarea").addEventListener("paste", e => e.preventDefault());
 
-  const verseInput = row.querySelector(".row-verse");
-  const contentInput = row.querySelector(".row-content");
-
-  // 복사·붙여넣기 금지
-  [verseInput, contentInput].forEach(el => el.addEventListener("paste", e => e.preventDefault()));
-
-  // row-verse는 숫자만 입력받음. type="number"나 inputmode="numeric"을 쓰면 Windows에서
-  // IME를 강제로 영문/반각 모드로 바꿔버려서 다음 칸으로 넘어가도 한글 입력이 계속 풀리기 때문에
-  // 순수 text 입력 + JS 필터링으로만 숫자를 강제한다 (IME에 영향을 주는 힌트 속성을 일절 쓰지 않음)
-  verseInput.addEventListener("input", () => {
-    verseInput.value = verseInput.value.replace(/[^0-9]/g, "");
-  });
-
-  verseInput.addEventListener("keydown", e => {
-    if (e.key === "Enter"){ e.preventDefault(); contentInput.focus(); }
-    if (e.key === "Backspace" && verseInput.value === ""){
-      e.preventDefault();
-      const prevRow = row.previousElementSibling;
-      if (prevRow){ row.remove(); prevRow.querySelector(".row-content").focus(); }
-    }
-  });
-
-  contentInput.addEventListener("keydown", e => {
-    if (e.key === "Enter"){
-      e.preventDefault();
-      addTypingRow();
-      area.lastElementChild.querySelector(".row-verse").focus();
-    }
-    if (e.key === "Backspace" && contentInput.value === ""){
-      e.preventDefault();
-      verseInput.focus();
-    }
-  });
-
-  verseInput.focus();
+// 원문처럼 한 줄에 "절번호 내용"을 이어서 입력한 텍스트를 [{ verse, content }] 배열로 변환
+function parseTypedRows(text){
+  return text.split("\n")
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => {
+      const m = line.match(/^(\d+)\s*(.*)$/);
+      return m ? { verse: Number(m[1]), content: m[2].trim() } : null;
+    })
+    .filter(Boolean);
 }
 
 document.getElementById("btn-submit").addEventListener("click", async () => {
-  const rows = [...document.querySelectorAll("#typing-area .typing-row")].map(row => ({
-    verse: Number(row.querySelector(".row-verse").value),
-    content: row.querySelector(".row-content").value,
-  }));
+  const rows = parseTypedRows(document.getElementById("typing-textarea").value);
   const btn = document.getElementById("btn-submit");
 
   btn.disabled = true;
@@ -452,7 +438,7 @@ document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(b => b.classList.remove("is-active"));
     btn.classList.add("is-active");
-    ["pending","members","assign"].forEach(t =>
+    ["pending","members","assign","content"].forEach(t =>
       document.getElementById(`admin-${t}`).hidden = t !== btn.dataset.adminTab);
   });
 });
@@ -548,6 +534,57 @@ function renderAssignPreview(startDate){
     </table>
     <p class="form-note">최초 2주 미리보기입니다. 총 ${CHAPTER_SEQUENCE.length}장 배정 완료.</p>`;
 }
+
+/* ---------- 관리자: 본문 입력 ---------- */
+(function initContentPicker(){
+  const bookSel = document.getElementById("content-book");
+  bookSel.innerHTML = EPISTLES.map(e => `<option value="${e.book}">${e.book} (총 ${e.chapters}장)</option>`).join("");
+  bookSel.addEventListener("change", () => {
+    const meta = EPISTLES.find(e => e.book === bookSel.value);
+    const chapterInput = document.getElementById("content-chapter");
+    chapterInput.max = meta.chapters;
+    if (Number(chapterInput.value) > meta.chapters) chapterInput.value = 1;
+    loadChapterContent();
+  });
+})();
+
+async function loadChapterContent(){
+  const book = document.getElementById("content-book").value;
+  const chapter = Number(document.getElementById("content-chapter").value) || 1;
+  const statusEl = document.getElementById("content-status");
+  const textarea = document.getElementById("content-textarea");
+
+  statusEl.textContent = "불러오는 중…";
+  try {
+    const data = await api(`/chapters?book=${encodeURIComponent(book)}&chapter=${chapter}`);
+    textarea.value = data.verses.map(v => `${v.verse} ${v.text}`).join("\n");
+    statusEl.textContent = data.verses.length ? `${data.verses.length}개 절이 저장되어 있어요.` : "아직 입력된 내용이 없어요.";
+  } catch (err) {
+    statusEl.textContent = err.message;
+  }
+}
+document.getElementById("btn-content-load").addEventListener("click", loadChapterContent);
+
+document.getElementById("btn-content-save").addEventListener("click", async () => {
+  const book = document.getElementById("content-book").value;
+  const chapter = Number(document.getElementById("content-chapter").value) || 1;
+  const verses = parseTypedRows(document.getElementById("content-textarea").value);
+  const statusEl = document.getElementById("content-status");
+  const btn = document.getElementById("btn-content-save");
+
+  if (!verses.length){ statusEl.textContent = "입력된 절이 없어요."; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = "저장 중…";
+  try {
+    await api("/chapters", { method: "POST", body: { book, chapter, verses } });
+    statusEl.textContent = `저장 완료 — ${book} ${chapter}장, ${verses.length}개 절.`;
+  } catch (err) {
+    statusEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /* ===========================================================
    시작

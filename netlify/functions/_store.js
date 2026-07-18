@@ -5,6 +5,7 @@
 //   Users:       이름 | 비밀번호해시 | 별명 | 상태 | 역할
 //   Submissions: 이름 | dayIndex | 제출시각
 //   Config:      key | value
+//   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문)
 
 const { getSheetsClient, SHEET_ID } = require("./_sheets");
 
@@ -118,8 +119,38 @@ async function setConfig(patch){
   }
 }
 
+/* ---------- Chapters (관리자가 입력하는 필사 원문) ---------- */
+
+async function getChapterVerses(book, chapter){
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Chapters!A2:D" });
+  const rows = res.data.values || [];
+  return rows
+    .filter(r => r[0] === book && Number(r[1]) === chapter)
+    .map(r => ({ verse: Number(r[2]), text: r[3] || "" }))
+    .sort((a, b) => a.verse - b.verse);
+}
+
+// 해당 책/장의 기존 절을 전부 지우고 새로 저장 (부분 수정이 아니라 통째로 교체)
+async function setChapterVerses(book, chapter, verses){
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Chapters!A2:D" });
+  const rows = res.data.values || [];
+  const remaining = rows.filter(r => !(r[0] === book && Number(r[1]) === chapter));
+  const newRows = verses.map(v => [book, chapter, v.verse, v.content]);
+  const allRows = [...remaining, ...newRows];
+
+  await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: "Chapters!A2:D" });
+  if (allRows.length){
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID, range: "Chapters!A2:D", valueInputOption: "RAW", requestBody: { values: allRows },
+    });
+  }
+}
+
 module.exports = {
   getUsers, addUser, updateUser, removeUser,
   getSubmissions, addSubmission,
   getConfig, setConfig,
+  getChapterVerses, setChapterVerses,
 };

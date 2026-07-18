@@ -266,18 +266,19 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   line-height: 28px;
   user-select: none; /* 원문 드래그 복사 방지 보조 */
 }
-.pilsa-panel__typing{ display:flex; flex-direction:column; gap:10px; margin-bottom:6px; }
-.typing-row{
-  display:grid; grid-template-columns: 56px 32px 1fr; gap:8px; align-items:center;
-}
-.typing-row input[type="number"], .typing-row input[type="text"]{
-  font-family: var(--mono);
-  border:none; border-bottom:1px solid var(--rule);
-  background:transparent; padding:7px 4px; font-size:.92rem; color:var(--ink);
+.pilsa-panel__typing{ margin-bottom:6px; }
+.typing-textarea{
+  width:100%; resize:vertical;
+  font-family: var(--serif); font-size:.95rem; color:var(--ink);
+  border:1px solid var(--rule-soft); border-radius: var(--radius);
+  padding: 14px 16px;
+  background: linear-gradient(var(--card), var(--card)),
+    repeating-linear-gradient(0deg, transparent 0 27px, var(--rule-soft) 27px 28px);
+  line-height: 28px;
   outline:none;
 }
-.typing-row input:focus{ border-bottom-color: var(--ink); }
-.typing-row__label{ text-align:center; color:var(--ink-soft); font-size:.8rem; }
+.typing-textarea:focus{ border-color: var(--ink); }
+.typing-textarea::placeholder{ color: var(--ink-soft); font-family: var(--sans); }
 
 .typing-hint{ color: var(--ink-soft); font-size:.78rem; margin: 4px 0 0; }
 .pilsa-panel__actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
@@ -294,6 +295,22 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   border:none; border-bottom:1px solid var(--rule); background:transparent;
   padding:4px; font-size:.85rem; width:110px;
 }
+
+.content-picker{
+  display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:14px;
+}
+.content-picker label{
+  font-size:.8rem; color:var(--ink-soft); display:flex; flex-direction:column; gap:5px;
+}
+.content-picker select, .content-picker input[type="number"]{
+  border:none; border-bottom:1px solid var(--rule);
+  background:transparent; padding:7px 2px; font-size:.9rem; color:var(--ink);
+  outline:none;
+}
+.content-picker select:focus, .content-picker input:focus{ border-bottom-color: var(--ink); }
+#content-chapter{ width:70px; }
+#admin-content .typing-textarea{ margin-bottom:10px; }
+#admin-content .btn{ margin-top:6px; }
 
 /* ===========================================================
    반응형
