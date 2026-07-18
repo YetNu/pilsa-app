@@ -16,7 +16,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, name, nickname, startDate } = JSON.parse(event.body || "{}");
+    const { action, name, nickname, startDate, names } = JSON.parse(event.body || "{}");
 
     if (action === "approve"){
       const ok = await store.updateUser(name, { status: "approved", nickname: nickname || "" });
@@ -34,6 +34,12 @@ exports.handler = async (event) => {
     if (action === "setNickname"){
       const ok = await store.updateUser(name, { nickname: nickname || "" });
       if (!ok) return json(404, { error: "회원을 찾을 수 없어요." });
+      return json(200, { ok: true });
+    }
+
+    if (action === "reorder"){
+      if (!Array.isArray(names) || !names.length) return json(400, { error: "순서 정보가 없어요." });
+      await store.reorderUsers(names);
       return json(200, { ok: true });
     }
 

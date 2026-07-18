@@ -510,8 +510,9 @@ function renderAdminMembers(users){
   const members = users.filter(u => u.status === "approved");
   const el = document.getElementById("admin-members");
   el.innerHTML = members.map(u => `
-    <div class="admin-row">
-      <span>${u.name}</span>
+    <div class="admin-row admin-row--draggable" data-name="${u.name}">
+      <span class="drag-handle" title="드래그해서 순서 변경">⠿</span>
+      <span class="admin-row__name">${u.name}</span>
       <input type="text" value="${u.nickname}" data-editnick="${u.name}">
       <button class="btn btn--ghost" data-remove="${u.name}">삭제</button>
     </div>`).join("");
@@ -528,6 +529,56 @@ function renderAdminMembers(users){
       renderAdmin();
     } catch (err) { alert(err.message); }
   }));
+
+  initMemberDragReorder(el);
+}
+
+// 이름 왼쪽 드래그 핸들(⠿)로 순서를 바꾸면 서버에 그 순서를 저장하고,
+// 현황 화면도 (같은 회원 목록 순서를 그대로 쓰기 때문에) 같은 순서로 보이게 된다
+// HTML5 드래그앤드롭(dragstart 등)은 마우스 전용이라 모바일 터치에서 전혀 동작하지 않으므로,
+// 데스크톱·모바일에서 동일하게 동작하는 Pointer Events로 직접 구현한다
+function initMemberDragReorder(container){
+  let dragRow = null;
+
+  function onPointerMove(e){
+    if (!dragRow) return;
+    e.preventDefault();
+    const rows = Array.from(container.querySelectorAll(".admin-row--draggable")).filter(r => r !== dragRow);
+    for (const row of rows){
+      const rect = row.getBoundingClientRect();
+      if (e.clientY < rect.top || e.clientY > rect.bottom) continue;
+      const before = e.clientY < rect.top + rect.height / 2;
+      container.insertBefore(dragRow, before ? row : row.nextSibling);
+      break;
+    }
+  }
+
+  async function onPointerUp(){
+    if (!dragRow) return;
+    dragRow.classList.remove("is-dragging");
+    const finishedRow = dragRow;
+    dragRow = null;
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+
+    const names = Array.from(container.querySelectorAll(".admin-row--draggable")).map(r => r.dataset.name);
+    try {
+      await api("/admin", { method: "POST", body: { action: "reorder", names } });
+    } catch (err) {
+      alert(err.message);
+      renderAdmin();
+    }
+  }
+
+  container.querySelectorAll(".admin-row--draggable").forEach(row => {
+    row.querySelector(".drag-handle").addEventListener("pointerdown", e => {
+      e.preventDefault();
+      dragRow = row;
+      row.classList.add("is-dragging");
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    });
+  });
 }
 
 document.getElementById("btn-assign-save").addEventListener("click", async () => {

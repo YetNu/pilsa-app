@@ -52,8 +52,17 @@ function formatAssignmentLabel(pair){
   return `${a.book}${a.chapter}장, ${b.book}${b.chapter}장`;
 }
 
-/* YYYY-MM-DD 문자열 유틸 */
-function toISODate(d){ return d.toISOString().slice(0, 10); }
+/* YYYY-MM-DD 문자열 유틸
+   주의: toISOString()은 UTC 기준으로 변환하기 때문에, 한국(UTC+9)처럼 UTC보다 앞선
+   시간대에서는 자정 근처(또는 addDays로 만든 로컬 자정 Date)에 하루가 밀려서 나오는
+   버그가 있었다. 로컬 캘린더 기준 연/월/일을 직접 조합해서 항상 보이는 그대로의
+   날짜가 나오게 한다. */
+function toISODate(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function addDays(dateStr, n){
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + n);

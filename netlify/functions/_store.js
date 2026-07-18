@@ -73,6 +73,20 @@ async function removeUser(name){
   return true;
 }
 
+// 관리자가 지정한 순서대로 회원 행을 재배열 (전체 회원/현황 화면 정렬 순서에 그대로 반영됨)
+async function reorderUsers(orderedNames){
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Users!A2:E" });
+  const rows = res.data.values || [];
+  const byName = new Map(rows.map(r => [r[0], r]));
+  const reordered = orderedNames.map(name => byName.get(name)).filter(Boolean);
+  const remaining = rows.filter(r => !orderedNames.includes(r[0]));
+  const allRows = [...reordered, ...remaining];
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID, range: "Users!A2:E", valueInputOption: "RAW", requestBody: { values: allRows },
+  });
+}
+
 /* ---------- Submissions ---------- */
 
 async function getSubmissions(){
@@ -149,7 +163,7 @@ async function setChapterVerses(book, chapter, verses){
 }
 
 module.exports = {
-  getUsers, addUser, updateUser, removeUser,
+  getUsers, addUser, updateUser, removeUser, reorderUsers,
   getSubmissions, addSubmission,
   getConfig, setConfig,
   getChapterVerses, setChapterVerses,
