@@ -206,7 +206,7 @@ async function renderStatus(){
       <div class="status-card">
         <div class="status-card__head">
           <span class="status-card__name">${u.name}<span class="status-card__nick">${u.nickname ? "· " + u.nickname : ""}</span></span>
-          <span class="status-card__pct">${pct}%</span>
+          <span class="status-card__pct">진행률 <span class="status-card__pct-num">${pct}%</span></span>
         </div>
         <table>
           <tr><th>요일</th>${["일","월","화","수","목","금","토"].map(d=>`<th>${d}</th>`).join("")}</tr>
@@ -407,7 +407,10 @@ function buildTypingArea(){
 }
 
 // 복사·붙여넣기 금지 (한 번만 등록하면 됨 — textarea는 매번 새로 만들지 않고 값만 비움)
-document.getElementById("typing-textarea").addEventListener("paste", e => e.preventDefault());
+// paste 이벤트만 막으면 드래그해서 끌어다 놓는 방식(drop)은 그대로 통과되므로 같이 막는다
+["paste", "drop"].forEach(evt => {
+  document.getElementById("typing-textarea").addEventListener(evt, e => e.preventDefault());
+});
 
 // 원문처럼 한 줄에 "절번호 내용"을 이어서 입력한 텍스트를 [{ verse, content }] 배열로 변환
 function parseTypedRows(text){
