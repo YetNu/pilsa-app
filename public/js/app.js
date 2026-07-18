@@ -138,39 +138,14 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
   }
 });
 
-/* ---------- 타이핑 중 이탈 방지 ---------- */
-// 필사 패널이 열려 있고 한 글자라도 입력된 상태에서 새로고침/뒤로가기/탭 닫기/다른 화면 이동을 하면
-// 확인 없이 내용이 사라지는 걸 막기 위한 가드
-function hasUnsavedTyping(){
-  const panel = document.getElementById("pilsa-panel");
-  if (panel.hidden) return false;
-  return document.getElementById("typing-textarea").value.trim().length > 0;
-}
-function confirmLeaveTyping(){
-  if (!hasUnsavedTyping()) return true;
-  return confirm("입력 중인 내용이 있어요. 지금 나가면 저장되지 않아요. 그래도 나가시겠어요?");
-}
-window.addEventListener("beforeunload", e => {
-  if (hasUnsavedTyping()){ e.preventDefault(); e.returnValue = ""; }
-});
-
 /* ---------- 상단바 이동 ---------- */
-document.getElementById("btn-status").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
-  showView("view-status");
-});
-document.getElementById("btn-mypilsa").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
-  weekOffset = 0; showView("view-mypilsa");
-});
-document.getElementById("btn-admin").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
-  showView("view-admin");
-});
-document.getElementById("btn-logout").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
-  logout();
-});
+// 필사 패널에 입력 중이던 내용은 타이핑하는 동안 계속 임시저장(draft)되기 때문에
+// (아래 draftKey/saveDraft 등 참고) 화면을 이동해도 잃어버리지 않는다 — 그래서
+// 예전에 있던 "정말 나가시겠어요?" 확인창은 더 이상 필요 없어서 제거함
+document.getElementById("btn-status").addEventListener("click", () => showView("view-status"));
+document.getElementById("btn-mypilsa").addEventListener("click", () => { weekOffset = 0; showView("view-mypilsa"); });
+document.getElementById("btn-admin").addEventListener("click", () => showView("view-admin"));
+document.getElementById("btn-logout").addEventListener("click", () => logout());
 
 /* ===========================================================
    현황 페이지
@@ -293,7 +268,7 @@ async function renderWeek(){
       doneRow.push(`<td>-</td>`);
     } else {
       const done = !!mySub[dayIndex];
-      chapRow.push(`<td data-day-index="${dayIndex}" data-date="${d}">${label}</td>`);
+      chapRow.push(`<td data-day-index="${dayIndex}" data-date="${d}" data-done="${done}">${label}</td>`);
       doneRow.push(`<td class="${done ? "is-done" : "is-fail"}">${done ? "⭕" : "❌"}</td>`);
     }
   });
@@ -305,8 +280,7 @@ async function renderWeek(){
 
   table.querySelectorAll(".row-chapter td[data-day-index]").forEach(td => {
     td.addEventListener("click", () => {
-      if (!confirmLeaveTyping()) return;
-      openPilsaPanel(Number(td.dataset.dayIndex), td.dataset.date);
+      openPilsaPanel(Number(td.dataset.dayIndex), td.dataset.date, td.dataset.done === "true");
     });
   });
 
@@ -314,14 +288,8 @@ async function renderWeek(){
   document.getElementById("pilsa-panel").hidden = true;
 }
 
-document.getElementById("week-prev").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
-  weekOffset--; renderWeek();
-});
-document.getElementById("week-next").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
-  weekOffset++; renderWeek();
-});
+document.getElementById("week-prev").addEventListener("click", () => { weekOffset--; renderWeek(); });
+document.getElementById("week-next").addEventListener("click", () => { weekOffset++; renderWeek(); });
 
 function renderIncompleteWarning(startDate, sub){
   const warnEl = document.getElementById("week-warning");
@@ -329,19 +297,19 @@ function renderIncompleteWarning(startDate, sub){
   warnEl.hidden = oldest === null;
 }
 
+// 오늘 몫은 아직 하루가 안 끝났으니 "미완료"로 안 치고, 이미 지나간 날짜만 확인한다
 function findOldestIncompleteDayIndex(startDate, sub){
   if (!startDate) return null;
   const today = toISODate(new Date());
   const maxDayIndex = dateToDayIndex(today, startDate);
   if (maxDayIndex === null) return null;
-  for (let i = 0; i <= maxDayIndex; i++){
+  for (let i = 0; i < maxDayIndex; i++){
     if (getAssignmentForDayIndex(i).length && !sub[i]) return i;
   }
   return null;
 }
 
 document.getElementById("btn-jump-oldest").addEventListener("click", async () => {
-  if (!confirmLeaveTyping()) return;
   const me = getCurrentUser();
   let data;
   try { data = await api("/status"); } catch { return; }
@@ -358,13 +326,15 @@ document.getElementById("btn-jump-oldest").addEventListener("click", async () =>
 function startOfWeek(d){ const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }
 
 /* ---------- 필사 패널 (본문 + 타이핑) ---------- */
-async function openPilsaPanel(dayIndex, dateStr){
+async function openPilsaPanel(dayIndex, dateStr, done){
   const pair = getAssignmentForDayIndex(dayIndex);
-  openAssignment = { dayIndex, pair, verses: [] };
+  openAssignment = { dayIndex, pair, verses: [], done: !!done };
 
   document.getElementById("pilsa-panel__title").textContent = formatAssignmentLabel(pair);
   document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-note">불러오는 중…</p>`;
   document.getElementById("typing-area").hidden = true;
+  document.querySelector(".typing-hint").hidden = openAssignment.done;
+  document.getElementById("btn-submit").hidden = openAssignment.done;
   document.getElementById("btn-submit").disabled = true;
   buildTypingArea();
   document.getElementById("pilsa-panel").hidden = false;
@@ -391,18 +361,43 @@ async function openPilsaPanel(dayIndex, dateStr){
     verses.map(v => `<div>${v.chapter}:${v.verse} ${v.text}</div>`).join("");
 
   openAssignment.verses = verses;
-  document.getElementById("typing-area").hidden = false;
-  document.getElementById("btn-submit").disabled = false;
+  if (!openAssignment.done){
+    document.getElementById("typing-area").hidden = false;
+    document.getElementById("btn-submit").disabled = false;
+  }
 }
 
 document.getElementById("btn-cancel").addEventListener("click", () => {
-  if (!confirmLeaveTyping()) return;
+  // 입력하던 내용은 draft로 남아있어서, 닫아도 같은 날짜를 다시 열면 이어서 쓸 수 있다
   document.getElementById("pilsa-panel").hidden = true;
 });
 
+// 모바일에서는 새로고침/이탈 경고창(beforeunload)이 거의 안 뜨기 때문에(특히 iOS Safari는
+// 아예 지원 안 함), 실수로 새로고침하거나 나가도 입력 중이던 내용을 잃지 않도록 타이핑하는
+// 동안 계속 localStorage에 임시 저장해두고, 같은 날짜를 다시 열면 자동으로 복원한다.
+// 제출에 성공하면 그때만 지운다 (닫기/다른 화면 이동 시에는 나중에 이어 쓸 수 있게 남겨둠).
+function draftKey(dayIndex){
+  const me = getCurrentUser();
+  return `pilsa_draft_${me ? me.name : "anon"}_${dayIndex}`;
+}
+function saveDraft(dayIndex, text){
+  if (text) localStorage.setItem(draftKey(dayIndex), text);
+  else localStorage.removeItem(draftKey(dayIndex));
+}
+function loadDraft(dayIndex){
+  return localStorage.getItem(draftKey(dayIndex)) || "";
+}
+function clearDraft(dayIndex){
+  localStorage.removeItem(draftKey(dayIndex));
+}
+document.getElementById("typing-textarea").addEventListener("input", e => {
+  if (openAssignment) saveDraft(openAssignment.dayIndex, e.target.value);
+});
+
 function buildTypingArea(){
+  if (openAssignment && openAssignment.done) return;
   const textarea = document.getElementById("typing-textarea");
-  textarea.value = "";
+  textarea.value = openAssignment ? loadDraft(openAssignment.dayIndex) : "";
   textarea.focus();
 }
 
@@ -445,6 +440,7 @@ document.getElementById("btn-submit").addEventListener("click", async () => {
       showAlertModal(data.message || "가감하였습니다.");
       return;
     }
+    clearDraft(openAssignment.dayIndex);
     document.getElementById("pilsa-panel").hidden = true;
     renderWeek();
   } catch (err) {

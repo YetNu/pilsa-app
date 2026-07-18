@@ -269,6 +269,9 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
     repeating-linear-gradient(0deg, transparent 0 27px, var(--rule-soft) 27px 28px);
   line-height: 28px;
   user-select: none; /* 원문 드래그 복사 방지 보조 */
+  /* 모바일에서 키보드가 뜨고 화면이 스크롤돼도 원문이 화면 밖으로 밀려나지 않도록 상단에 고정 */
+  position: sticky; top: 0; z-index: 3;
+  box-shadow: 0 4px 10px rgba(34,48,74,.08);
 }
 .pilsa-panel__typing{ margin-bottom:6px; }
 .typing-textarea{
