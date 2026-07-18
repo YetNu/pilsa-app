@@ -1,0 +1,17 @@
+{
+  "name": "pilsa-app",
+  "version": "0.1.0",
+  "description": "성경 서신서 필사(타이핑) 사이트 - Netlify + Google Sheets",
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.14.1",
+    "googleapis": "^140.0.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.38.0"
+  }
+}

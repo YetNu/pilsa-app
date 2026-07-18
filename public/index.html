@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>필사 — 말씀을 손끝으로</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Gothic+Coding&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- ============ 상단 바 (로그인 후에만 표시) ============ -->
+  <header class="topbar" id="topbar" hidden>
+    <div class="topbar__left">
+      <button class="topbar__btn" id="btn-status" title="현황">현황</button>
+      <button class="topbar__btn" id="btn-mypilsa" title="내 필사">내 필사</button>
+    </div>
+    <div class="topbar__title">필사</div>
+    <div class="topbar__right">
+      <button class="topbar__btn topbar__btn--admin" id="btn-admin" hidden title="관리자">관리자</button>
+      <button class="topbar__btn topbar__btn--logout" id="btn-logout" title="로그아웃">로그아웃</button>
+    </div>
+  </header>
+
+  <main id="app">
+
+    <!-- ============ 로그인 / 회원가입 ============ -->
+    <section class="view" id="view-auth">
+      <div class="auth-card">
+        <div class="auth-card__mark">✎</div>
+        <h1 class="auth-card__title">필사</h1>
+        <p class="auth-card__sub">한 절 한 절, 손끝으로 옮겨 적습니다</p>
+
+        <form id="form-login" class="auth-form">
+          <label>이름<input type="text" id="login-name" required autocomplete="username"></label>
+          <label>비밀번호<input type="password" id="login-pw" required autocomplete="current-password"></label>
+          <p class="form-error" id="login-error"></p>
+          <button type="submit" class="btn btn--primary">로그인</button>
+        </form>
+
+        <p class="auth-card__switch">아직 계정이 없으신가요? <button type="button" class="link-btn" id="btn-open-signup">회원가입</button></p>
+      </div>
+    </section>
+
+    <!-- ============ 현황 (로그인 기본 화면) ============ -->
+    <section class="view" id="view-status" hidden>
+      <h2 class="view-title">전체 현황</h2>
+      <div class="status-list" id="status-list">
+        <!-- JS로 참여자 카드가 채워짐 -->
+      </div>
+    </section>
+
+    <!-- ============ 내 필사 ============ -->
+    <section class="view" id="view-mypilsa" hidden>
+      <h2 class="view-title">내 필사</h2>
+
+      <div class="week-box" id="week-box">
+        <div class="week-box__nav">
+          <button id="week-prev" class="week-arrow" aria-label="이전 주">‹</button>
+          <span id="week-range" class="week-range">이번 주</span>
+          <button id="week-next" class="week-arrow" aria-label="다음 주">›</button>
+        </div>
+
+        <div class="week-warning" id="week-warning" hidden>
+          ⚠ 아직 완료하지 않은 장이 있어요.
+          <button id="btn-jump-oldest" class="link-btn">이전 필사 바로가기</button>
+        </div>
+
+        <table class="week-table" id="week-table">
+          <tbody>
+            <tr class="row-day"><th>요일</th></tr>
+            <tr class="row-chapter"><th>필사</th></tr>
+            <tr class="row-done"><th>완료여부</th></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 장 클릭 시 펼쳐지는 필사 패널 -->
+      <div class="pilsa-panel" id="pilsa-panel" hidden>
+        <h3 id="pilsa-panel__title"></h3>
+
+        <div class="pilsa-panel__text" id="pilsa-panel__text">
+          <!-- 원문 (읽기 전용, 스크롤) -->
+        </div>
+
+        <div class="pilsa-panel__typing" id="typing-area">
+          <!-- JS가 절번호/절/내용 세트를 동적으로 생성 -->
+        </div>
+
+        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가)</p>
+
+        <div class="pilsa-panel__actions">
+          <button class="btn btn--ghost" id="btn-cancel">닫기</button>
+          <button class="btn btn--primary" id="btn-submit">제출하기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 관리자 ============ -->
+    <section class="view" id="view-admin" hidden>
+      <h2 class="view-title">관리자</h2>
+
+      <div class="tabs">
+        <button class="tabs__btn is-active" data-admin-tab="pending">승인 대기</button>
+        <button class="tabs__btn" data-admin-tab="members">전체 회원</button>
+        <button class="tabs__btn" data-admin-tab="assign">성경 장 배정</button>
+      </div>
+
+      <div class="admin-panel" id="admin-pending"></div>
+      <div class="admin-panel" id="admin-members" hidden></div>
+      <div class="admin-panel" id="admin-assign" hidden>
+        <label>시작일
+          <input type="date" id="assign-start-date">
+        </label>
+        <button class="btn btn--primary" id="btn-assign-save">배정 계산하기</button>
+        <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 2장씩 자동 배정됩니다.</p>
+        <div id="assign-preview"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ 회원가입 모달 ============ -->
+  <div class="modal-overlay" id="signup-overlay" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="signup-modal-title">
+      <button type="button" class="modal-close" id="btn-close-signup" aria-label="닫기">✕</button>
+      <h2 id="signup-modal-title" class="modal-box__title">회원가입</h2>
+
+      <form id="form-signup" class="auth-form">
+        <label>이름<input type="text" id="signup-name" required></label>
+        <label>비밀번호<input type="password" id="signup-pw" required
+          placeholder="영어+숫자+특수문자 포함 8자 이상"></label>
+        <label>비밀번호 확인<input type="password" id="signup-pw2" required></label>
+        <p class="form-error" id="signup-error"></p>
+        <p class="form-note">가입 후 관리자 승인이 완료되면 로그인할 수 있어요.</p>
+        <button type="submit" class="btn btn--primary">회원가입 신청</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ 알림 모달 (제출 결과 등) ============ -->
+  <div class="modal-overlay" id="alert-modal" hidden>
+    <div class="modal-box modal-box--alert" role="alertdialog" aria-modal="true" aria-labelledby="alert-modal-message">
+      <p id="alert-modal-message" class="modal-box__message"></p>
+      <div class="modal-box__actions">
+        <button type="button" class="btn btn--primary" id="btn-alert-confirm">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/data.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
