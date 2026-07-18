@@ -407,10 +407,20 @@ function buildTypingArea(){
 }
 
 // 복사·붙여넣기 금지 (한 번만 등록하면 됨 — textarea는 매번 새로 만들지 않고 값만 비움)
-// paste 이벤트만 막으면 드래그해서 끌어다 놓는 방식(drop)은 그대로 통과되므로 같이 막는다
-["paste", "drop"].forEach(evt => {
-  document.getElementById("typing-textarea").addEventListener(evt, e => e.preventDefault());
-});
+// paste/drop 이벤트만으로는 모바일(키보드 위 "붙여넣기" 추천 칩 등)에서 안 막히는 경우가 있어서,
+// 실제로 삽입되는 내용의 종류를 알려주는 beforeinput의 inputType으로 한 번 더 확실히 막는다
+(function preventPasteOnTypingTextarea(){
+  const textarea = document.getElementById("typing-textarea");
+  ["paste", "drop"].forEach(evt => textarea.addEventListener(evt, e => e.preventDefault()));
+  textarea.addEventListener("beforeinput", e => {
+    const blocked = ["insertFromPaste", "insertFromPasteAsQuotation", "insertFromDrop", "insertReplacementText"];
+    if (blocked.includes(e.inputType)) { e.preventDefault(); return; }
+    // 일부 모바일 키보드(삼성 키보드 클립보드 패널 등)는 붙여넣기를 일반 입력처럼 보고해서
+    // 위 분류로 안 걸러지는 경우가 있음 — 한 번에 여러 글자가 통째로 들어오면(정상 타이핑은
+    // 보통 한 글자~한 음절씩 들어옴) 붙여넣기로 간주하고 막는다
+    if (typeof e.data === "string" && e.data.length > 10) e.preventDefault();
+  });
+})();
 
 // 원문처럼 한 줄에 "절번호 내용"을 이어서 입력한 텍스트를 [{ verse, content }] 배열로 변환
 function parseTypedRows(text){

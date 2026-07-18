@@ -141,7 +141,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .auth-form label{ font-size:.8rem; color:var(--ink-soft); display:flex; flex-direction:column; gap:5px; }
 .auth-form input{
   border:none; border-bottom:1px solid var(--rule);
-  background:transparent; padding:8px 2px; font-size:.95rem; color:var(--ink);
+  background:transparent; padding:8px 2px; font-size:16px; color:var(--ink);
   outline:none;
 }
 .auth-form input:focus{ border-bottom-color: var(--ink); }
@@ -273,7 +273,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .pilsa-panel__typing{ margin-bottom:6px; }
 .typing-textarea{
   width:100%; resize:vertical;
-  font-family: var(--serif); font-size:.95rem; color:var(--ink);
+  font-family: var(--serif); font-size:16px; color:var(--ink);
   border:1px solid var(--rule-soft); border-radius: var(--radius);
   padding: 14px 16px;
   background: linear-gradient(var(--card), var(--card)),
@@ -297,7 +297,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 }
 .admin-row input[type="text"]{
   border:none; border-bottom:1px solid var(--rule); background:transparent;
-  padding:4px; font-size:.85rem; width:110px;
+  padding:4px; font-size:16px; width:110px;
 }
 
 .content-picker{
@@ -308,7 +308,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 }
 .content-picker select, .content-picker input[type="number"]{
   border:none; border-bottom:1px solid var(--rule);
-  background:transparent; padding:7px 2px; font-size:.9rem; color:var(--ink);
+  background:transparent; padding:7px 2px; font-size:16px; color:var(--ink);
   outline:none;
 }
 .content-picker select:focus, .content-picker input:focus{ border-bottom-color: var(--ink); }
