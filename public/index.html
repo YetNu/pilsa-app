@@ -85,11 +85,12 @@
         </div>
 
         <div class="pilsa-panel__typing" id="typing-area">
-          <textarea id="typing-textarea" class="typing-textarea" rows="5"
-            placeholder="원문처럼 한 줄에 '절번호 내용'을 입력하세요.&#10;예) 1 예수 그리스도의 종 바울은 사도로 부르심을 받아..."></textarea>
+          <div class="verse-input-list" id="typing-area-list">
+            <!-- 절마다 하나씩 입력칸이 JS로 채워짐 -->
+          </div>
         </div>
 
-        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가). 한 줄에 절 번호와 내용을 원문처럼 이어서 입력하세요.</p>
+        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가). 절마다 이어서 입력하고, Enter를 누르면 다음 절로 넘어가요. 원문과 다른 단어는 빨간 글씨로 표시돼요.</p>
 
         <div class="pilsa-panel__actions">
           <button class="btn btn--ghost" id="btn-cancel">닫기</button>
@@ -116,7 +117,7 @@
           <input type="date" id="assign-start-date">
         </label>
         <button class="btn btn--primary" id="btn-assign-save">배정 계산하기</button>
-        <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 2장씩 자동 배정됩니다.</p>
+        <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 1장씩 자동 배정됩니다.</p>
         <div id="assign-preview"></div>
       </div>
       <div class="admin-panel" id="admin-content" hidden>

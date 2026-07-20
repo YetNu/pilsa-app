@@ -1,6 +1,6 @@
 /* ===========================================================
    서신서 순서 (로마서 → 유다서), 개역한글 기준 장 수
-   실제 서비스에서는 이 목록 순서대로 하루 2장씩 자동 배정됩니다.
+   실제 서비스에서는 이 목록 순서대로 하루 1장씩 자동 배정됩니다.
    =========================================================== */
 const EPISTLES = [
   { book: "로마서",     chapters: 16 },
@@ -36,20 +36,38 @@ function buildChapterSequence(){
 }
 const CHAPTER_SEQUENCE = buildChapterSequence();
 
-/* startDate(YYYY-MM-DD) 기준, index번째 날(0=시작일)에 배정되는 장 2개를 반환 */
+/* startDate(YYYY-MM-DD) 기준, index번째 날(0=시작일)에 배정되는 장을 반환 (하루 1장) */
 function getAssignmentForDayIndex(dayIndex){
-  const a = CHAPTER_SEQUENCE[dayIndex * 2];
-  const b = CHAPTER_SEQUENCE[dayIndex * 2 + 1]; // 마지막 날은 undefined일 수 있음(총 121장 홀수)
-  return [a, b].filter(Boolean);
+  const a = CHAPTER_SEQUENCE[dayIndex];
+  return a ? [a] : [];
 }
 
-/* 두 장을 "로마서1~2장" 또는 책이 바뀌면 "로마서16장, 고린도전서1장" 형태로 표기 */
+/* "로마서1장" 형태로 표기 */
 function formatAssignmentLabel(pair){
   if (pair.length === 0) return "-";
-  if (pair.length === 1) return `${pair[0].book}${pair[0].chapter}장`;
-  const [a, b] = pair;
-  if (a.book === b.book) return `${a.book}${a.chapter}~${b.chapter}장`;
-  return `${a.book}${a.chapter}장, ${b.book}${b.chapter}장`;
+  return `${pair[0].book}${pair[0].chapter}장`;
+}
+
+/* 보이지 않는 문자(BOM, zero-width space 등)와 줄바꿈 없는 공백(NBSP), 중복 공백을
+   정리해서 눈으로는 같아 보이는데 byte 단위로는 다른 텍스트 때문에 채점이 계속
+   틀리게 나오는 걸 막는다. 서버(submit.js)와 클라이언트(실시간 오타 표시) 양쪽에서
+   같은 기준으로 비교해야 하므로 여기 한 곳에만 둔다.
+   (코드에 보이지 않는 문자를 그대로 적으면 알아보기 어려우니 항상 \uXXXX 코드값으로 표기) */
+const INVISIBLE_CODE_POINTS = [
+  0x200B, 0x200C, 0x200D, 0xFEFF, // ZWSP, ZWNJ, ZWJ, BOM
+  0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, // 좌우 방향 제어문자
+];
+const INVISIBLE_CHARS_RE = new RegExp(
+  "[" + INVISIBLE_CODE_POINTS.map(c => "\\u" + c.toString(16).padStart(4, "0")).join("") + "]", "g"
+);
+const NBSP_RE = new RegExp("\\u00A0", "g");
+
+function normalizeVerseText(text){
+  return (text || "")
+    .replace(INVISIBLE_CHARS_RE, "")
+    .replace(NBSP_RE, " ") // NBSP는 눈에 보이는 일반 공백으로 취급
+    .replace(/\s+/g, " ")  // 중복 공백을 하나로
+    .trim();
 }
 
 /* YYYY-MM-DD 문자열 유틸
@@ -75,6 +93,6 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     EPISTLES, CHAPTER_SEQUENCE, buildChapterSequence,
     getAssignmentForDayIndex, formatAssignmentLabel,
-    toISODate, addDays,
+    toISODate, addDays, normalizeVerseText,
   };
 }

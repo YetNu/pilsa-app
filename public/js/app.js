@@ -194,7 +194,7 @@ async function renderStatus(){
 function calcProgressPct(userName, today, submissions, startDate, totalChapters){
   if (!startDate || today < startDate) return 0;
   const totalDayIndex = Math.floor((new Date(today) - new Date(startDate)) / 86400000);
-  const totalAssignedDays = Math.min(totalDayIndex + 1, Math.ceil(totalChapters / 2));
+  const totalAssignedDays = Math.min(totalDayIndex + 1, totalChapters);
   if (totalAssignedDays <= 0) return 0;
   const sub = submissions[userName] || {};
   let done = 0;
@@ -205,14 +205,11 @@ function calcProgressPct(userName, today, submissions, startDate, totalChapters)
 /* ===========================================================
    내 필사 (주간 박스)
    =========================================================== */
-// 좁은 표 칸에서 "로마서13~14장"처럼 어색하게 줄바꿈되는 걸 막기 위해,
-// 책 이름과 장 번호를 의도한 지점에서 줄바꿈해서 보여주는 HTML 버전
+// 좁은 표 칸에서 책 이름과 장 번호가 줄바꿈될 때 이상한 지점에서 끊기지 않도록,
+// 책 이름과 장 번호 사이에서 줄바꿈해서 보여주는 HTML 버전
 function formatAssignmentLabelHTML(pair){
   if (pair.length === 0) return "-";
-  if (pair.length === 1) return `${pair[0].book}<br>${pair[0].chapter}장`;
-  const [a, b] = pair;
-  if (a.book === b.book) return `${a.book}<br>${a.chapter}~${b.chapter}장`;
-  return `${a.book}${a.chapter}장,<br>${b.book}${b.chapter}장`;
+  return `${pair[0].book}<br>${pair[0].chapter}장`;
 }
 
 function getWeekDates(offset){
@@ -333,10 +330,10 @@ async function openPilsaPanel(dayIndex, dateStr, done){
   document.getElementById("pilsa-panel__title").textContent = formatAssignmentLabel(pair);
   document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-note">불러오는 중…</p>`;
   document.getElementById("typing-area").hidden = true;
+  document.getElementById("typing-area-list").innerHTML = "";
   document.querySelector(".typing-hint").hidden = openAssignment.done;
   document.getElementById("btn-submit").hidden = openAssignment.done;
   document.getElementById("btn-submit").disabled = true;
-  buildTypingArea();
   document.getElementById("pilsa-panel").hidden = false;
   document.getElementById("pilsa-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -364,6 +361,7 @@ async function openPilsaPanel(dayIndex, dateStr, done){
   if (!openAssignment.done){
     document.getElementById("typing-area").hidden = false;
     document.getElementById("btn-submit").disabled = false;
+    buildTypingArea();
   }
 }
 
@@ -374,38 +372,30 @@ document.getElementById("btn-cancel").addEventListener("click", () => {
 
 // 모바일에서는 새로고침/이탈 경고창(beforeunload)이 거의 안 뜨기 때문에(특히 iOS Safari는
 // 아예 지원 안 함), 실수로 새로고침하거나 나가도 입력 중이던 내용을 잃지 않도록 타이핑하는
-// 동안 계속 localStorage에 임시 저장해두고, 같은 날짜를 다시 열면 자동으로 복원한다.
+// 동안 계속 localStorage에 절 단위로 임시 저장해두고, 같은 날짜를 다시 열면 자동으로 복원한다.
 // 제출에 성공하면 그때만 지운다 (닫기/다른 화면 이동 시에는 나중에 이어 쓸 수 있게 남겨둠).
 function draftKey(dayIndex){
   const me = getCurrentUser();
   return `pilsa_draft_${me ? me.name : "anon"}_${dayIndex}`;
 }
-function saveDraft(dayIndex, text){
-  if (text) localStorage.setItem(draftKey(dayIndex), text);
-  else localStorage.removeItem(draftKey(dayIndex));
-}
 function loadDraft(dayIndex){
-  return localStorage.getItem(draftKey(dayIndex)) || "";
+  try { return JSON.parse(localStorage.getItem(draftKey(dayIndex)) || "{}"); }
+  catch { return {}; }
+}
+function saveDraftVerse(dayIndex, verse, text){
+  const draft = loadDraft(dayIndex);
+  if (text) draft[verse] = text; else delete draft[verse];
+  if (Object.keys(draft).length) localStorage.setItem(draftKey(dayIndex), JSON.stringify(draft));
+  else localStorage.removeItem(draftKey(dayIndex));
 }
 function clearDraft(dayIndex){
   localStorage.removeItem(draftKey(dayIndex));
 }
-document.getElementById("typing-textarea").addEventListener("input", e => {
-  if (openAssignment) saveDraft(openAssignment.dayIndex, e.target.value);
-});
 
-function buildTypingArea(){
-  if (openAssignment && openAssignment.done) return;
-  const textarea = document.getElementById("typing-textarea");
-  textarea.value = openAssignment ? loadDraft(openAssignment.dayIndex) : "";
-  textarea.focus();
-}
-
-// 복사·붙여넣기 금지 (한 번만 등록하면 됨 — textarea는 매번 새로 만들지 않고 값만 비움)
+// 복사·붙여넣기 금지 — 절 입력칸이 장을 열 때마다 새로 만들어지므로 만들어질 때마다 걸어준다.
 // paste/drop 이벤트만으로는 모바일(키보드 위 "붙여넣기" 추천 칩 등)에서 안 막히는 경우가 있어서,
 // 실제로 삽입되는 내용의 종류를 알려주는 beforeinput의 inputType으로 한 번 더 확실히 막는다
-(function preventPasteOnTypingTextarea(){
-  const textarea = document.getElementById("typing-textarea");
+function preventPasteOn(textarea){
   ["paste", "drop"].forEach(evt => textarea.addEventListener(evt, e => e.preventDefault()));
   textarea.addEventListener("beforeinput", e => {
     const blocked = ["insertFromPaste", "insertFromPasteAsQuotation", "insertFromDrop", "insertReplacementText"];
@@ -415,9 +405,98 @@ function buildTypingArea(){
     // 보통 한 글자~한 음절씩 들어옴) 붙여넣기로 간주하고 막는다
     if (typeof e.data === "string" && e.data.length > 10) e.preventDefault();
   });
-})();
+}
+
+function escapeHtml(s){
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// 오타 판정 기준은 문장 전체가 아니라 "띄어쓰기 전까지"(어절) 단위 — 한 단어를 다 쓰고
+// 스페이스를 누른 시점에 그 단어가 원문과 다르면 빨간 글씨로 표시한다. 아직 스페이스를
+// 안 누른, 지금 쓰고 있는 마지막 단어는 미완성이니 색을 매기지 않는다.
+function renderVerseOverlay(overlayEl, typed, sourceText){
+  const sourceWords = normalizeVerseText(sourceText).split(" ").filter(Boolean);
+  let html = "";
+  let wordStart = 0;
+  let wordIndex = 0;
+  for (let i = 0; i <= typed.length; i++){
+    const atEnd = i === typed.length;
+    const isSpace = !atEnd && typed[i] === " ";
+    if (isSpace || atEnd){
+      const word = typed.slice(wordStart, i);
+      if (word.length){
+        if (isSpace){
+          const correct = sourceWords[wordIndex] === word;
+          html += `<span class="${correct ? "" : "is-wrong"}">${escapeHtml(word)}</span>`;
+          wordIndex++;
+        } else {
+          html += `<span>${escapeHtml(word)}</span>`;
+        }
+      }
+      if (isSpace) html += " ";
+      wordStart = i + 1;
+    }
+  }
+  overlayEl.innerHTML = html;
+}
+
+function autoResizeVerseInput(textarea, overlay){
+  textarea.style.height = "auto";
+  const h = textarea.scrollHeight;
+  textarea.style.height = h + "px";
+  overlay.style.minHeight = h + "px";
+}
+
+// 필사 입력칸을 절마다 하나씩 만든다. Enter를 누르면 다음 절 칸으로 넘어가고,
+// 입력할 때마다 원문과 비교해 틀린 단어를 실시간으로 빨간 글씨로 보여준다.
+function buildTypingArea(){
+  const container = document.getElementById("typing-area-list");
+  container.innerHTML = "";
+  if (!openAssignment || openAssignment.done) return;
+
+  const draft = loadDraft(openAssignment.dayIndex);
+  const textareas = [];
+
+  openAssignment.verses.forEach((v, i) => {
+    const row = document.createElement("div");
+    row.className = "verse-input-row";
+    row.innerHTML = `
+      <span class="verse-input-row__num">${v.verse}절</span>
+      <div class="verse-input-row__box">
+        <div class="verse-input-row__overlay" aria-hidden="true"></div>
+        <textarea class="verse-input-row__textarea" rows="1" data-verse="${v.verse}"
+          spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+      </div>`;
+    container.appendChild(row);
+
+    const textarea = row.querySelector(".verse-input-row__textarea");
+    const overlay = row.querySelector(".verse-input-row__overlay");
+    textarea.value = draft[v.verse] || "";
+    renderVerseOverlay(overlay, textarea.value, v.text);
+    autoResizeVerseInput(textarea, overlay);
+    preventPasteOn(textarea);
+
+    textarea.addEventListener("input", () => {
+      renderVerseOverlay(overlay, textarea.value, v.text);
+      autoResizeVerseInput(textarea, overlay);
+      saveDraftVerse(openAssignment.dayIndex, v.verse, textarea.value);
+    });
+
+    textarea.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const next = textareas[i + 1];
+      if (next) next.focus(); else textarea.blur();
+    });
+
+    textareas.push(textarea);
+  });
+
+  if (textareas[0]) textareas[0].focus();
+}
 
 // 원문처럼 한 줄에 "절번호 내용"을 이어서 입력한 텍스트를 [{ verse, content }] 배열로 변환
+// (관리자가 본문을 등록할 때 쓰는 형식 — 회원 필사 입력은 절마다 따로 입력하므로 여기엔 안 쓰임)
 function parseTypedRows(text){
   return text.split("\n")
     .map(line => line.trim())
@@ -430,7 +509,8 @@ function parseTypedRows(text){
 }
 
 document.getElementById("btn-submit").addEventListener("click", async () => {
-  const rows = parseTypedRows(document.getElementById("typing-textarea").value);
+  const rows = Array.from(document.querySelectorAll("#typing-area-list .verse-input-row__textarea"))
+    .map(t => ({ verse: Number(t.dataset.verse), content: t.value.trim() }));
   const btn = document.getElementById("btn-submit");
 
   btn.disabled = true;
