@@ -44,6 +44,7 @@ function logout(){
 }
 
 let weekOffset = 0;          // 내 필사 화면: 0 = 이번 주
+let statusWeekOffset = 0;    // 전체 현황의 요일별 달성률 박스: 0 = 이번 주
 let openAssignment = null;   // 현재 펼쳐진 (날짜, 배정쌍)
 
 /* ---------- 화면 전환 ---------- */
@@ -142,7 +143,7 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
 // 필사 패널에 입력 중이던 내용은 타이핑하는 동안 계속 임시저장(draft)되기 때문에
 // (아래 draftKey/saveDraft 등 참고) 화면을 이동해도 잃어버리지 않는다 — 그래서
 // 예전에 있던 "정말 나가시겠어요?" 확인창은 더 이상 필요 없어서 제거함
-document.getElementById("btn-status").addEventListener("click", () => showView("view-status"));
+document.getElementById("btn-status").addEventListener("click", () => { statusWeekOffset = 0; showView("view-status"); });
 document.getElementById("btn-mypilsa").addEventListener("click", () => { weekOffset = 0; showView("view-mypilsa"); });
 document.getElementById("btn-admin").addEventListener("click", () => showView("view-admin"));
 document.getElementById("btn-logout").addEventListener("click", () => logout());
@@ -150,13 +151,21 @@ document.getElementById("btn-logout").addEventListener("click", () => logout());
 /* ===========================================================
    현황 페이지
    =========================================================== */
+let statusData = null; // 마지막으로 불러온 /status 응답 — 주 이동 시 다시 불러오지 않고 재사용
+
 async function renderStatus(){
   const list = document.getElementById("status-list");
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
 
   let data;
   try { data = await api("/status"); }
-  catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  catch (err){
+    list.innerHTML = `<p class="form-error">${err.message}</p>`;
+    document.getElementById("status-week-avg").textContent = "";
+    return;
+  }
+  statusData = data;
+  renderStatusWeekBox();
 
   const { users, submissions, startDate, totalChapters } = data;
   const today = toISODate(new Date());
@@ -190,6 +199,54 @@ async function renderStatus(){
       </div>`;
   }).join("") || `<p class="form-note">아직 승인된 참여자가 없어요.</p>`;
 }
+
+// 요일별 달성률 = 그 날짜에 배정이 있었던 요일에 한해, 전체 참여 인원 중 완료한 인원의 비율.
+// 평균 달성률은 그 주에서 계산 가능했던(배정이 있고 이미 지난) 요일들의 평균이다.
+function renderStatusWeekBox(){
+  if (!statusData) return;
+  const { users, submissions, startDate } = statusData;
+  const days = getWeekDates(statusWeekOffset);
+  const today = toISODate(new Date());
+  const dayLabels = ["일","월","화","수","목","금","토"];
+  const totalUsers = users.length;
+
+  document.getElementById("status-week-range").textContent = `${days[0]} ~ ${days[6]}`;
+
+  const dayRow = [`<th>요일</th>`];
+  const rateRow = [`<th>달성률</th>`];
+  const applicableRates = [];
+
+  days.forEach((d, i) => {
+    dayRow.push(`<td>${dayLabels[i]}</td>`);
+    const dayIndex = dateToDayIndex(d, startDate);
+    const isFuture = d > today;
+    const hasAssignment = dayIndex !== null && getAssignmentForDayIndex(dayIndex).length > 0;
+
+    if (!hasAssignment || isFuture || totalUsers === 0){
+      rateRow.push(`<td>-</td>`);
+      return;
+    }
+    const doneCount = users.filter(u => submissions[u.name] && submissions[u.name][dayIndex]).length;
+    const pct = Math.round((doneCount / totalUsers) * 100);
+    applicableRates.push(pct);
+    rateRow.push(`<td>${pct}%</td>`);
+  });
+
+  document.getElementById("status-week-table").querySelector("tbody").innerHTML =
+    `<tr class="row-day">${dayRow.join("")}</tr>
+     <tr class="row-rate">${rateRow.join("")}</tr>`;
+
+  const avg = applicableRates.length
+    ? Math.round(applicableRates.reduce((a, b) => a + b, 0) / applicableRates.length)
+    : 0;
+  document.getElementById("status-week-avg").innerHTML =
+    applicableRates.length
+      ? `평균 달성률 <span class="status-week-avg__num">${avg}%</span>`
+      : `평균 달성률 <span class="status-week-avg__num">-</span>`;
+}
+
+document.getElementById("status-week-prev").addEventListener("click", () => { statusWeekOffset--; renderStatusWeekBox(); });
+document.getElementById("status-week-next").addEventListener("click", () => { statusWeekOffset++; renderStatusWeekBox(); });
 
 function calcProgressPct(userName, today, submissions, startDate, totalChapters){
   if (!startDate || today < startDate) return 0;
@@ -265,7 +322,7 @@ async function renderWeek(){
       doneRow.push(`<td>-</td>`);
     } else {
       const done = !!mySub[dayIndex];
-      chapRow.push(`<td data-day-index="${dayIndex}" data-date="${d}" data-done="${done}">${label}</td>`);
+      chapRow.push(`<td data-day-index="${dayIndex}" data-done="${done}">${label}</td>`);
       doneRow.push(`<td class="${done ? "is-done" : "is-fail"}">${done ? "⭕" : "❌"}</td>`);
     }
   });
@@ -277,7 +334,7 @@ async function renderWeek(){
 
   table.querySelectorAll(".row-chapter td[data-day-index]").forEach(td => {
     td.addEventListener("click", () => {
-      openPilsaPanel(Number(td.dataset.dayIndex), td.dataset.date, td.dataset.done === "true");
+      openPilsaPanel(Number(td.dataset.dayIndex), td.dataset.done === "true");
     });
   });
 
@@ -294,11 +351,13 @@ function renderIncompleteWarning(startDate, sub){
   warnEl.hidden = oldest === null;
 }
 
-// 오늘 몫은 아직 하루가 안 끝났으니 "미완료"로 안 치고, 이미 지나간 날짜만 확인한다
+// 이번 주(오늘이 속한 주) 안에서는 아직 다 못 했어도 경고를 띄우지 않는다.
+// 한 주가 완전히 지나서 다음 주 일요일이 되어야 — 즉 이번 주가 시작되기 전(=지난 주 이전)
+// 날짜 중에 안 한 게 있을 때만 — 경고를 띄운다
 function findOldestIncompleteDayIndex(startDate, sub){
   if (!startDate) return null;
-  const today = toISODate(new Date());
-  const maxDayIndex = dateToDayIndex(today, startDate);
+  const thisWeekSunday = toISODate(startOfWeek(new Date()));
+  const maxDayIndex = dateToDayIndex(thisWeekSunday, startDate);
   if (maxDayIndex === null) return null;
   for (let i = 0; i < maxDayIndex; i++){
     if (getAssignmentForDayIndex(i).length && !sub[i]) return i;
@@ -318,12 +377,13 @@ document.getElementById("btn-jump-oldest").addEventListener("click", async () =>
   const target = new Date(targetDate);
   const diffWeeks = Math.floor((startOfWeek(target) - startOfWeek(today0)) / (7 * 86400000));
   weekOffset = diffWeeks;
-  renderWeek();
+  await renderWeek();
+  openPilsaPanel(idx, false); // 그 주로 이동만 하지 않고, 가장 오래된 미완료 필사를 바로 열어준다
 });
 function startOfWeek(d){ const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }
 
 /* ---------- 필사 패널 (본문 + 타이핑) ---------- */
-async function openPilsaPanel(dayIndex, dateStr, done){
+async function openPilsaPanel(dayIndex, done){
   const pair = getAssignmentForDayIndex(dayIndex);
   openAssignment = { dayIndex, pair, verses: [], done: !!done };
 

@@ -46,6 +46,22 @@
     <!-- ============ 현황 (로그인 기본 화면) ============ -->
     <section class="view" id="view-status" hidden>
       <h2 class="view-title">전체 현황</h2>
+
+      <div class="week-box" id="status-week-box">
+        <div class="week-box__nav">
+          <button id="status-week-prev" class="week-arrow" aria-label="이전 주">‹</button>
+          <span id="status-week-range" class="week-range">이번 주</span>
+          <button id="status-week-next" class="week-arrow" aria-label="다음 주">›</button>
+        </div>
+        <table class="week-table" id="status-week-table">
+          <tbody>
+            <tr class="row-day"><th>요일</th></tr>
+            <tr class="row-rate"><th>달성률</th></tr>
+          </tbody>
+        </table>
+        <p class="status-week-avg" id="status-week-avg"></p>
+      </div>
+
       <div class="status-list" id="status-list">
         <!-- JS로 참여자 카드가 채워짐 -->
       </div>
