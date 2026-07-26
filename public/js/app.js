@@ -166,10 +166,16 @@ async function renderStatus(){
   }
   statusData = data;
   renderStatusWeekBox();
+  renderStatusList();
+}
 
-  const { users, submissions, startDate, totalChapters } = data;
+// 전체 참여자별 카드 — 요일별 달성률 박스와 같은 주(statusWeekOffset)를 보여준다
+function renderStatusList(){
+  const list = document.getElementById("status-list");
+  if (!statusData) return;
+  const { users, submissions, startDate, totalChapters } = statusData;
   const today = toISODate(new Date());
-  const days = getWeekDates(0); // 이번 주 일~토
+  const days = getWeekDates(statusWeekOffset);
 
   list.innerHTML = users.map(u => {
     const pct = calcProgressPct(u.name, today, submissions, startDate, totalChapters);
@@ -245,8 +251,8 @@ function renderStatusWeekBox(){
       : `평균 달성률 <span class="status-week-avg__num">-</span>`;
 }
 
-document.getElementById("status-week-prev").addEventListener("click", () => { statusWeekOffset--; renderStatusWeekBox(); });
-document.getElementById("status-week-next").addEventListener("click", () => { statusWeekOffset++; renderStatusWeekBox(); });
+document.getElementById("status-week-prev").addEventListener("click", () => { statusWeekOffset--; renderStatusWeekBox(); renderStatusList(); });
+document.getElementById("status-week-next").addEventListener("click", () => { statusWeekOffset++; renderStatusWeekBox(); renderStatusList(); });
 
 function calcProgressPct(userName, today, submissions, startDate, totalChapters){
   if (!startDate || today < startDate) return 0;
@@ -472,9 +478,12 @@ function escapeHtml(s){
 }
 
 // 오타 판정 기준은 문장 전체가 아니라 "띄어쓰기 전까지"(어절) 단위 — 한 단어를 다 쓰고
-// 스페이스를 누른 시점에 그 단어가 원문과 다르면 빨간 글씨로 표시한다. 아직 스페이스를
-// 안 누른, 지금 쓰고 있는 마지막 단어는 미완성이니 색을 매기지 않는다.
-function renderVerseOverlay(overlayEl, typed, sourceText){
+// 스페이스를 누른 시점에 그 단어가 원문과 다르면 빨간 글씨로 표시한다. 타이핑 중(finalize
+// 안 함)에는 지금 쓰고 있는 마지막 단어가 미완성일 수 있으니 색을 매기지 않지만,
+// finalize=true로 부르면(칸을 벗어날 때 등) 스페이스 없이 끝난 마지막 단어도 확정해서 검사한다
+// — 그렇지 않으면 절의 맨 끝 단어를 스페이스 없이 쓰고 바로 Enter로 다음 절로 넘어갔을 때
+// 그 단어가 틀려도 절대 빨간 글씨로 안 뜨는 오류가 있었다.
+function renderVerseOverlay(overlayEl, typed, sourceText, finalize){
   const sourceWords = normalizeVerseText(sourceText).split(" ").filter(Boolean);
   let html = "";
   let wordStart = 0;
@@ -485,7 +494,8 @@ function renderVerseOverlay(overlayEl, typed, sourceText){
     if (isSpace || atEnd){
       const word = typed.slice(wordStart, i);
       if (word.length){
-        if (isSpace){
+        const confirmed = isSpace || (atEnd && finalize);
+        if (confirmed){
           const correct = sourceWords[wordIndex] === word;
           html += `<span class="${correct ? "" : "is-wrong"}">${escapeHtml(word)}</span>`;
           wordIndex++;
@@ -532,7 +542,7 @@ function buildTypingArea(){
     const textarea = row.querySelector(".verse-input-row__textarea");
     const overlay = row.querySelector(".verse-input-row__overlay");
     textarea.value = draft[v.verse] || "";
-    renderVerseOverlay(overlay, textarea.value, v.text);
+    renderVerseOverlay(overlay, textarea.value, v.text, true); // 복원된 임시저장 내용은 이미 다 쓴 것으로 취급
     autoResizeVerseInput(textarea, overlay);
     preventPasteOn(textarea);
 
@@ -540,6 +550,12 @@ function buildTypingArea(){
       renderVerseOverlay(overlay, textarea.value, v.text);
       autoResizeVerseInput(textarea, overlay);
       saveDraftVerse(openAssignment.dayIndex, v.verse, textarea.value);
+    });
+
+    // 칸을 벗어날 때(Enter로 다음 절 이동, 다른 곳 클릭, 제출 버튼 클릭 등)는 스페이스 없이
+    // 끝난 마지막 단어도 확정해서 검사한다
+    textarea.addEventListener("blur", () => {
+      renderVerseOverlay(overlay, textarea.value, v.text, true);
     });
 
     textarea.addEventListener("keydown", e => {
