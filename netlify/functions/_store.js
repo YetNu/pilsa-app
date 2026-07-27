@@ -9,14 +9,42 @@
 
 const { getSheetsClient, SHEET_ID } = require("./_sheets");
 
+/* ---------- 짧은 시간만 유지하는 메모리 캐시 ----------
+   시트 값을 읽을 때마다 매번 구글 시트 API를 부르면, 특히 필사 원문(Chapters)처럼
+   전체 서신서 분량이 쌓일 표는 회원이 어떤 날짜를 열 때마다 표 전체를 긁어오게 되어
+   느려진다. Netlify Functions가 같은 컨테이너를 재사용하는 동안(warm)만 유지되는
+   메모리 캐시를 둬서, 짧은 시간 안에 반복되는 읽기는 시트를 다시 부르지 않게 한다.
+   쓰기(추가/수정/삭제) 후에는 그 자리에서 바로 캐시를 비워서 다음 읽기부터는
+   반영되게 한다 — 다만 여러 컨테이너가 동시에 떠 있으면 캐시가 서로 공유되지 않으므로
+   TTL을 안전망으로 짧게 잡아, 최악의 경우에도 그 시간 안에는 최신 값으로 갱신된다. */
+const SHORT_TTL_MS = 20 * 1000;   // 회원 목록/제출 기록: 자주 바뀌니 짧게
+const CONTENT_TTL_MS = 2 * 60 * 1000; // 필사 원문: 관리자만 가끔 바꾸니 좀 더 길게
+
+const cache = { users: null, submissions: null, chapters: null }; // 각각 { at, data }
+
+function cacheGet(key, ttl){
+  const c = cache[key];
+  return c && Date.now() - c.at < ttl ? c.data : null;
+}
+function cacheSet(key, data){
+  cache[key] = { at: Date.now(), data };
+}
+function cacheClear(key){
+  cache[key] = null;
+}
+
 /* ---------- Users ---------- */
 
 async function getUsers(){
+  const cached = cacheGet("users", SHORT_TTL_MS);
+  if (cached) return cached;
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Users!A2:E" });
-  return (res.data.values || []).map(r => ({
+  const data = (res.data.values || []).map(r => ({
     name: r[0], passwordHash: r[1], nickname: r[2] || "", status: r[3], role: r[4],
   }));
+  cacheSet("users", data);
+  return data;
 }
 
 async function addUser(user){
@@ -27,6 +55,7 @@ async function addUser(user){
     valueInputOption: "RAW",
     requestBody: { values: [[user.name, user.passwordHash, user.nickname || "", user.status, user.role]] },
   });
+  cacheClear("users");
 }
 
 async function updateUser(name, patch){
@@ -50,6 +79,7 @@ async function updateUser(name, patch){
     valueInputOption: "RAW",
     requestBody: { values: [updated] },
   });
+  cacheClear("users");
   return true;
 }
 
@@ -70,6 +100,7 @@ async function removeUser(name){
       }],
     },
   });
+  cacheClear("users");
   return true;
 }
 
@@ -85,14 +116,19 @@ async function reorderUsers(orderedNames){
   await sheets.spreadsheets.values.update({
     spreadsheetId: SHEET_ID, range: "Users!A2:E", valueInputOption: "RAW", requestBody: { values: allRows },
   });
+  cacheClear("users");
 }
 
 /* ---------- Submissions ---------- */
 
 async function getSubmissions(){
+  const cached = cacheGet("submissions", SHORT_TTL_MS);
+  if (cached) return cached;
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Submissions!A2:C" });
-  return (res.data.values || []).map(r => ({ name: r[0], dayIndex: Number(r[1]), at: r[2] }));
+  const data = (res.data.values || []).map(r => ({ name: r[0], dayIndex: Number(r[1]), at: r[2] }));
+  cacheSet("submissions", data);
+  return data;
 }
 
 async function addSubmission(sub){
@@ -103,6 +139,7 @@ async function addSubmission(sub){
     valueInputOption: "RAW",
     requestBody: { values: [[sub.name, sub.dayIndex, sub.at]] },
   });
+  cacheClear("submissions");
 }
 
 /* ---------- Config ---------- */
@@ -135,10 +172,20 @@ async function setConfig(patch){
 
 /* ---------- Chapters (관리자가 입력하는 필사 원문) ---------- */
 
-async function getChapterVerses(book, chapter){
+// 절 하나하나가 아니라 Chapters 표 전체를 캐시한다 — 회원이 각자 다른 책/장을 열어도
+// (관리자가 방금 저장한 게 아닌 이상) 한 번 읽은 원문으로 돌려막을 수 있기 때문
+async function getChaptersRaw(){
+  const cached = cacheGet("chapters", CONTENT_TTL_MS);
+  if (cached) return cached;
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Chapters!A2:D" });
-  const rows = res.data.values || [];
+  const data = res.data.values || [];
+  cacheSet("chapters", data);
+  return data;
+}
+
+async function getChapterVerses(book, chapter){
+  const rows = await getChaptersRaw();
   return rows
     .filter(r => r[0] === book && Number(r[1]) === chapter)
     .map(r => ({ verse: Number(r[2]), text: r[3] || "" }))
@@ -160,6 +207,7 @@ async function setChapterVerses(book, chapter, verses){
       spreadsheetId: SHEET_ID, range: "Chapters!A2:D", valueInputOption: "RAW", requestBody: { values: allRows },
     });
   }
+  cacheClear("chapters");
 }
 
 module.exports = {
