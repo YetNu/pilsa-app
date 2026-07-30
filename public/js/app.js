@@ -175,6 +175,7 @@ function renderStatusList(){
   if (!statusData) return;
   const { users, submissions, startDate, totalChapters } = statusData;
   const today = toISODate(new Date());
+  const tomorrow = addDays(today, 1); // 오늘뿐 아니라 내일 것도 미리 할 수 있으니, 모레부터만 미래로 취급
   const days = getWeekDates(statusWeekOffset);
 
   list.innerHTML = users.map(u => {
@@ -183,7 +184,7 @@ function renderStatusList(){
     const cells = days.map(d => {
       const dayIndex = dateToDayIndex(d, startDate);
       const done = dayIndex !== null && sub[dayIndex];
-      const isFuture = d > today;
+      const isFuture = d > tomorrow;
       let cls = "", mark = "-";
       if (!isFuture && dayIndex !== null){
         mark = done ? "⭕" : "❌";
@@ -213,6 +214,7 @@ function renderStatusWeekBox(){
   const { users, submissions, startDate } = statusData;
   const days = getWeekDates(statusWeekOffset);
   const today = toISODate(new Date());
+  const tomorrow = addDays(today, 1); // 오늘뿐 아니라 내일 것도 미리 할 수 있으니, 모레부터만 미래로 취급
   const dayLabels = ["일","월","화","수","목","금","토"];
   const totalUsers = users.length;
 
@@ -225,7 +227,7 @@ function renderStatusWeekBox(){
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = d > today;
+    const isFuture = d > tomorrow;
     const hasAssignment = dayIndex !== null && getAssignmentForDayIndex(dayIndex).length > 0;
 
     if (!hasAssignment || isFuture || totalUsers === 0){
@@ -307,6 +309,7 @@ async function renderWeek(){
   const me = getCurrentUser();
   const mySub = submissions[me.name] || {};
   const today = toISODate(new Date());
+  const tomorrow = addDays(today, 1); // 당일 것뿐 아니라 다음날 것도 미리 필사할 수 있게 허용
   const dayLabels = ["일","월","화","수","목","금","토"];
 
   const dayRow = [`<th>요일</th>`];
@@ -316,7 +319,7 @@ async function renderWeek(){
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = d > today; // 요일이 되기 전엔 타이핑 불가
+    const isFuture = d > tomorrow; // 모레부터는 아직 타이핑 불가
     const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
     const label = pair.length ? formatAssignmentLabelHTML(pair) : "-";
 
