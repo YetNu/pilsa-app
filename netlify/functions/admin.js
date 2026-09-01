@@ -3,7 +3,7 @@ const { requireAdmin } = require("./_auth");
 
 // 관리자 전용
 // GET: 전체 회원 목록 + 배정 시작일 조회
-// POST body: { action: "approve" | "reject" | "remove" | "setNickname" | "setStartDate", ...payload }
+// POST body: { action: "approve" | "reject" | "remove" | "setNickname" | "setStartDate" | "setAllowFuture", ...payload }
 exports.handler = async (event) => {
   try {
     requireAdmin(event); // role !== 'admin' 이면 403 에러
@@ -11,12 +11,12 @@ exports.handler = async (event) => {
     if (event.httpMethod === "GET"){
       const [users, config] = await Promise.all([store.getUsers(), store.getConfig()]);
       const safeUsers = users.map(({ passwordHash, ...rest }) => rest); // 비밀번호 해시는 응답에서 제외
-      return json(200, { users: safeUsers, startDate: config.start_date || "" });
+      return json(200, { users: safeUsers, startDate: config.start_date || "", allowFuture: config.allow_future });
     }
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, name, nickname, startDate, names } = JSON.parse(event.body || "{}");
+    const { action, name, nickname, startDate, names, allowFuture } = JSON.parse(event.body || "{}");
 
     if (action === "approve"){
       const ok = await store.updateUser(name, { status: "approved", nickname: nickname || "" });
@@ -47,6 +47,11 @@ exports.handler = async (event) => {
       if (!startDate) return json(400, { error: "시작일을 선택해주세요." });
       await store.setConfig({ start_date: startDate });
       return json(200, { ok: true, startDate });
+    }
+
+    if (action === "setAllowFuture"){
+      await store.setConfig({ allow_future: !!allowFuture });
+      return json(200, { ok: true, allowFuture: !!allowFuture });
     }
 
     return json(400, { error: "알 수 없는 action 입니다." });

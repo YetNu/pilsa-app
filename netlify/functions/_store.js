@@ -148,25 +148,40 @@ async function getConfig(){
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Config!A2:B" });
   const rows = res.data.values || [];
-  const row = rows.find(r => r[0] === "start_date");
-  return { start_date: row ? row[1] : "" };
+  const find = key => rows.find(r => r[0] === key);
+  const startDateRow = find("start_date");
+  const allowFutureRow = find("allow_future");
+  return {
+    start_date: startDateRow ? startDateRow[1] : "",
+    // 값이 아예 없으면(기존 시트) 켜짐으로 취급 — 미리 열기는 이미 켜진 채로 배포됐던 기능이라
+    // 관리자가 아직 한 번도 끄지 않았다면 그대로 켜져 있어야 한다
+    allow_future: allowFutureRow ? allowFutureRow[1] !== "0" : true,
+  };
 }
 
 async function setConfig(patch){
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Config!A2:B" });
   const rows = res.data.values || [];
-  const idx = rows.findIndex(r => r[0] === "start_date");
-  const value = [["start_date", patch.start_date]];
-  if (idx === -1){
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID, range: "Config!A2:B", valueInputOption: "RAW", requestBody: { values: value },
-    });
-  } else {
-    const sheetRow = idx + 2; // 1행은 헤더 → 데이터는 2행부터
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID, range: `Config!A${sheetRow}:B${sheetRow}`, valueInputOption: "RAW", requestBody: { values: value },
-    });
+
+  const upserts = [];
+  if (patch.start_date !== undefined) upserts.push(["start_date", patch.start_date]);
+  if (patch.allow_future !== undefined) upserts.push(["allow_future", patch.allow_future ? "1" : "0"]);
+
+  for (const [key, value] of upserts){
+    const idx = rows.findIndex(r => r[0] === key);
+    if (idx === -1){
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID, range: "Config!A2:B", valueInputOption: "RAW", requestBody: { values: [[key, value]] },
+      });
+      rows.push([key, value]); // 이번 호출 안에서 다음 upsert가 같은 키를 또 append하지 않도록 로컬 상태도 갱신
+    } else {
+      const sheetRow = idx + 2; // 1행은 헤더 → 데이터는 2행부터
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID, range: `Config!A${sheetRow}:B${sheetRow}`, valueInputOption: "RAW", requestBody: { values: [[key, value]] },
+      });
+      rows[idx] = [key, value];
+    }
   }
 }
 

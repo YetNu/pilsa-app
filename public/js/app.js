@@ -173,9 +173,8 @@ async function renderStatus(){
 function renderStatusList(){
   const list = document.getElementById("status-list");
   if (!statusData) return;
-  const { users, submissions, startDate, totalChapters } = statusData;
+  const { users, submissions, startDate, totalChapters, allowFuture } = statusData;
   const today = toISODate(new Date());
-  const tomorrow = addDays(today, 1); // 오늘뿐 아니라 내일 것도 미리 할 수 있으니, 모레부터만 미래로 취급
   const days = getWeekDates(statusWeekOffset);
 
   list.innerHTML = users.map(u => {
@@ -184,7 +183,7 @@ function renderStatusList(){
     const cells = days.map(d => {
       const dayIndex = dateToDayIndex(d, startDate);
       const done = dayIndex !== null && sub[dayIndex];
-      const isFuture = d > tomorrow;
+      const isFuture = !allowFuture && d > today; // 관리자 설정: 꺼져 있으면 오늘 이후는 전부 미래로 취급
       let cls = "", mark = "-";
       if (!isFuture && dayIndex !== null){
         mark = done ? "⭕" : "❌";
@@ -211,10 +210,9 @@ function renderStatusList(){
 // 평균 달성률은 그 주에서 계산 가능했던(배정이 있고 이미 지난) 요일들의 평균이다.
 function renderStatusWeekBox(){
   if (!statusData) return;
-  const { users, submissions, startDate } = statusData;
+  const { users, submissions, startDate, allowFuture } = statusData;
   const days = getWeekDates(statusWeekOffset);
   const today = toISODate(new Date());
-  const tomorrow = addDays(today, 1); // 오늘뿐 아니라 내일 것도 미리 할 수 있으니, 모레부터만 미래로 취급
   const dayLabels = ["일","월","화","수","목","금","토"];
   const totalUsers = users.length;
 
@@ -227,7 +225,7 @@ function renderStatusWeekBox(){
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = d > tomorrow;
+    const isFuture = !allowFuture && d > today; // 관리자 설정: 꺼져 있으면 오늘 이후는 전부 미래로 취급
     const hasAssignment = dayIndex !== null && getAssignmentForDayIndex(dayIndex).length > 0;
 
     if (!hasAssignment || isFuture || totalUsers === 0){
@@ -305,11 +303,10 @@ async function renderWeek(){
     return;
   }
 
-  const { submissions, startDate } = data;
+  const { submissions, startDate, allowFuture } = data;
   const me = getCurrentUser();
   const mySub = submissions[me.name] || {};
   const today = toISODate(new Date());
-  const tomorrow = addDays(today, 1); // 당일 것뿐 아니라 다음날 것도 미리 필사할 수 있게 허용
   const dayLabels = ["일","월","화","수","목","금","토"];
 
   const dayRow = [`<th>요일</th>`];
@@ -319,7 +316,7 @@ async function renderWeek(){
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = d > tomorrow; // 모레부터는 아직 타이핑 불가
+    const isFuture = !allowFuture && d > today; // 관리자 설정: 꺼져 있으면 오늘 이후는 전부 미래로 취급
     const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
     const label = pair.length ? formatAssignmentLabelHTML(pair) : "-";
 
@@ -633,6 +630,7 @@ async function renderAdmin(){
   renderAdminMembers(data.users);
   document.getElementById("assign-start-date").value = data.startDate || "";
   renderAssignPreview(data.startDate);
+  document.getElementById("assign-allow-future").checked = !!data.allowFuture;
 }
 
 function renderAdminPending(users){
@@ -747,6 +745,20 @@ document.getElementById("btn-assign-save").addEventListener("click", async () =>
     await api("/admin", { method: "POST", body: { action: "setStartDate", startDate: val } });
     renderAssignPreview(val);
   } catch (err) { alert(err.message); }
+});
+
+document.getElementById("assign-allow-future").addEventListener("change", async e => {
+  const checkbox = e.target;
+  const allowFuture = checkbox.checked;
+  checkbox.disabled = true;
+  try {
+    await api("/admin", { method: "POST", body: { action: "setAllowFuture", allowFuture } });
+  } catch (err) {
+    alert(err.message);
+    checkbox.checked = !allowFuture; // 실패 시 되돌림
+  } finally {
+    checkbox.disabled = false;
+  }
 });
 
 function renderAssignPreview(startDate){

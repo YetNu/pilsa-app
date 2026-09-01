@@ -31,6 +31,7 @@ exports.handler = async (event) => {
       submissions,
       startDate: config.start_date || "",
       totalChapters: CHAPTER_SEQUENCE.length,
+      allowFuture: config.allow_future,
     });
   } catch (err) {
     console.error(err);
