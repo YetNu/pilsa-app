@@ -173,8 +173,9 @@ async function renderStatus(){
 function renderStatusList(){
   const list = document.getElementById("status-list");
   if (!statusData) return;
-  const { users, submissions, startDate, totalChapters, allowFuture } = statusData;
+  const { users, submissions, startDate, totalChapters, openUntil } = statusData;
   const today = toISODate(new Date());
+  const previewEnd = openUntil || addDays(today, 1); // 관리자가 정한 마감일 — 없으면 기본값(내일까지)
   const days = getWeekDates(statusWeekOffset);
 
   list.innerHTML = users.map(u => {
@@ -183,7 +184,7 @@ function renderStatusList(){
     const cells = days.map(d => {
       const dayIndex = dateToDayIndex(d, startDate);
       const done = dayIndex !== null && sub[dayIndex];
-      const isFuture = !allowFuture && d > today; // 관리자 설정: 꺼져 있으면 오늘 이후는 전부 미래로 취급
+      const isFuture = d > previewEnd;
       let cls = "", mark = "-";
       if (!isFuture && dayIndex !== null){
         mark = done ? "⭕" : "❌";
@@ -210,9 +211,10 @@ function renderStatusList(){
 // 평균 달성률은 그 주에서 계산 가능했던(배정이 있고 이미 지난) 요일들의 평균이다.
 function renderStatusWeekBox(){
   if (!statusData) return;
-  const { users, submissions, startDate, allowFuture } = statusData;
+  const { users, submissions, startDate, openUntil } = statusData;
   const days = getWeekDates(statusWeekOffset);
   const today = toISODate(new Date());
+  const previewEnd = openUntil || addDays(today, 1); // 관리자가 정한 마감일 — 없으면 기본값(내일까지)
   const dayLabels = ["일","월","화","수","목","금","토"];
   const totalUsers = users.length;
 
@@ -225,7 +227,7 @@ function renderStatusWeekBox(){
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = !allowFuture && d > today; // 관리자 설정: 꺼져 있으면 오늘 이후는 전부 미래로 취급
+    const isFuture = d > previewEnd;
     const hasAssignment = dayIndex !== null && getAssignmentForDayIndex(dayIndex).length > 0;
 
     if (!hasAssignment || isFuture || totalUsers === 0){
@@ -303,10 +305,11 @@ async function renderWeek(){
     return;
   }
 
-  const { submissions, startDate, allowFuture } = data;
+  const { submissions, startDate, openUntil } = data;
   const me = getCurrentUser();
   const mySub = submissions[me.name] || {};
   const today = toISODate(new Date());
+  const previewEnd = openUntil || addDays(today, 1); // 관리자가 정한 마감일 — 없으면 기본값(내일까지)
   const dayLabels = ["일","월","화","수","목","금","토"];
 
   const dayRow = [`<th>요일</th>`];
@@ -316,7 +319,7 @@ async function renderWeek(){
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = !allowFuture && d > today; // 관리자 설정: 꺼져 있으면 오늘 이후는 전부 미래로 취급
+    const isFuture = d > previewEnd;
     const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
     const label = pair.length ? formatAssignmentLabelHTML(pair) : "-";
 
@@ -421,7 +424,7 @@ async function openPilsaPanel(dayIndex, done){
   }
 
   document.getElementById("pilsa-panel__text").innerHTML =
-    verses.map(v => `<div>${v.chapter}:${v.verse} ${v.text}</div>`).join("");
+    verses.map(v => `<div>${v.verse} ${v.text}</div>`).join("");
 
   openAssignment.verses = verses;
   if (!openAssignment.done){
@@ -630,7 +633,7 @@ async function renderAdmin(){
   renderAdminMembers(data.users);
   document.getElementById("assign-start-date").value = data.startDate || "";
   renderAssignPreview(data.startDate);
-  document.getElementById("assign-allow-future").checked = !!data.allowFuture;
+  document.getElementById("assign-open-until").value = data.openUntil || "";
 }
 
 function renderAdminPending(users){
@@ -747,17 +750,17 @@ document.getElementById("btn-assign-save").addEventListener("click", async () =>
   } catch (err) { alert(err.message); }
 });
 
-document.getElementById("assign-allow-future").addEventListener("change", async e => {
-  const checkbox = e.target;
-  const allowFuture = checkbox.checked;
-  checkbox.disabled = true;
+document.getElementById("assign-open-until").addEventListener("change", async e => {
+  const input = e.target;
+  const openUntil = input.value; // 비우면 기본값(내일까지)으로 되돌아감
+  input.disabled = true;
   try {
-    await api("/admin", { method: "POST", body: { action: "setAllowFuture", allowFuture } });
+    await api("/admin", { method: "POST", body: { action: "setOpenUntil", openUntil } });
   } catch (err) {
     alert(err.message);
-    checkbox.checked = !allowFuture; // 실패 시 되돌림
+    renderAdmin(); // 실패 시 서버 값으로 되돌림
   } finally {
-    checkbox.disabled = false;
+    input.disabled = false;
   }
 });
 
@@ -777,6 +780,9 @@ function renderAssignPreview(startDate){
 }
 
 /* ---------- 관리자: 본문 입력 ---------- */
+// 책/장을 바꾸면(드롭다운 선택이든, 장 번호 직접 입력이든, 이전·다음 장 버튼이든) 그 자리에서
+// 바로 원문을 불러온다 — 예전에는 장 번호만 바꿨을 때 "불러오기"를 따로 눌러야 했고,
+// 안 누르고 저장하면 이전 장 내용이 새 장에 그대로 저장되는 사고가 날 수 있었다.
 (function initContentPicker(){
   const bookSel = document.getElementById("content-book");
   bookSel.innerHTML = EPISTLES.map(e => `<option value="${e.book}">${e.book} (총 ${e.chapters}장)</option>`).join("");
@@ -787,7 +793,34 @@ function renderAssignPreview(startDate){
     if (Number(chapterInput.value) > meta.chapters) chapterInput.value = 1;
     loadChapterContent();
   });
+  document.getElementById("content-chapter").addEventListener("change", loadChapterContent);
 })();
+
+// 현재 책의 장 범위를 넘어가면 자동으로 이전/다음 책으로 넘어간다 (책 경계에서는 멈춤)
+function moveContentChapter(delta){
+  const bookSel = document.getElementById("content-book");
+  const chapterInput = document.getElementById("content-chapter");
+  const bookIdx = EPISTLES.findIndex(e => e.book === bookSel.value);
+  let targetIdx = bookIdx;
+  let chapter = Number(chapterInput.value) + delta;
+
+  if (chapter < 1){
+    targetIdx = bookIdx - 1;
+    if (targetIdx < 0) return;
+    chapter = EPISTLES[targetIdx].chapters;
+  } else if (chapter > EPISTLES[bookIdx].chapters){
+    targetIdx = bookIdx + 1;
+    if (targetIdx >= EPISTLES.length) return;
+    chapter = 1;
+  }
+
+  bookSel.value = EPISTLES[targetIdx].book;
+  chapterInput.max = EPISTLES[targetIdx].chapters;
+  chapterInput.value = chapter;
+  loadChapterContent();
+}
+document.getElementById("btn-content-prev").addEventListener("click", () => moveContentChapter(-1));
+document.getElementById("btn-content-next").addEventListener("click", () => moveContentChapter(1));
 
 async function loadChapterContent(){
   const book = document.getElementById("content-book").value;

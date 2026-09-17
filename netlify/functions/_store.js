@@ -150,12 +150,11 @@ async function getConfig(){
   const rows = res.data.values || [];
   const find = key => rows.find(r => r[0] === key);
   const startDateRow = find("start_date");
-  const allowFutureRow = find("allow_future");
+  const openUntilRow = find("open_until");
   return {
     start_date: startDateRow ? startDateRow[1] : "",
-    // 값이 아예 없으면(기존 시트) 켜짐으로 취급 — 미리 열기는 이미 켜진 채로 배포됐던 기능이라
-    // 관리자가 아직 한 번도 끄지 않았다면 그대로 켜져 있어야 한다
-    allow_future: allowFutureRow ? allowFutureRow[1] !== "0" : true,
+    // 관리자가 정한, 미리 입력을 허용하는 마지막 날짜. 비어있으면 클라이언트가 기본값(내일까지)을 적용한다
+    open_until: openUntilRow ? openUntilRow[1] : "",
   };
 }
 
@@ -166,7 +165,7 @@ async function setConfig(patch){
 
   const upserts = [];
   if (patch.start_date !== undefined) upserts.push(["start_date", patch.start_date]);
-  if (patch.allow_future !== undefined) upserts.push(["allow_future", patch.allow_future ? "1" : "0"]);
+  if (patch.open_until !== undefined) upserts.push(["open_until", patch.open_until || ""]);
 
   for (const [key, value] of upserts){
     const idx = rows.findIndex(r => r[0] === key);

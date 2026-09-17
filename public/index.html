@@ -136,10 +136,10 @@
         <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 1장씩 자동 배정됩니다.</p>
         <div id="assign-preview"></div>
 
-        <label class="form-checkbox">
-          <input type="checkbox" id="assign-allow-future">
-          모든 날짜 미리 열기 (켜면 당일뿐 아니라 앞으로의 날짜도 전부 미리 입력할 수 있어요)
+        <label>미리 열기 마감일
+          <input type="date" id="assign-open-until">
         </label>
+        <p class="form-note">이 날짜까지는 미리 입력할 수 있어요. 비워두면 기본값(내일까지)으로 열려요.</p>
       </div>
       <div class="admin-panel" id="admin-content" hidden>
         <div class="content-picker">
@@ -149,7 +149,9 @@
           <label>장
             <input type="number" id="content-chapter" min="1" value="1">
           </label>
-          <button class="btn btn--ghost" id="btn-content-load">불러오기</button>
+          <button class="btn btn--ghost" id="btn-content-prev" title="이전 장">‹ 이전 장</button>
+          <button class="btn btn--ghost" id="btn-content-next" title="다음 장">다음 장 ›</button>
+          <button class="btn btn--ghost" id="btn-content-load">다시 불러오기</button>
         </div>
         <textarea id="content-textarea" class="typing-textarea" rows="14"
           placeholder="한 줄에 '절번호 내용'을 입력하세요.&#10;예) 1 예수 그리스도의 종 바울은 사도로 부르심을 받아..."></textarea>
