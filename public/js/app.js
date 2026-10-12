@@ -48,14 +48,16 @@ let statusWeekOffset = 0;    // 전체 현황의 요일별 달성률 박스: 0 =
 let openAssignment = null;   // 현재 펼쳐진 (날짜, 배정쌍)
 
 /* ---------- 화면 전환 ---------- */
-const views = ["view-auth", "view-status", "view-mypilsa", "view-admin"];
+const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-admin"];
 function showView(id){
   views.forEach(v => document.getElementById(v).hidden = (v !== id));
   document.getElementById("topbar").hidden = (id === "view-auth");
   const me = getCurrentUser();
   document.getElementById("btn-admin").hidden = !(me && me.role === "admin");
-  if (id === "view-status") renderStatus();
+  document.getElementById("topbar-name").textContent = me ? me.name : "";
+  if (id === "view-status") renderStatusTab();
   if (id === "view-mypilsa"){ weekOffset = weekOffset || 0; renderWeek(); }
+  if (id === "view-memo") renderMemo();
   if (id === "view-admin") renderAdmin();
 }
 
@@ -143,8 +145,9 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
 // 필사 패널에 입력 중이던 내용은 타이핑하는 동안 계속 임시저장(draft)되기 때문에
 // (아래 draftKey/saveDraft 등 참고) 화면을 이동해도 잃어버리지 않는다 — 그래서
 // 예전에 있던 "정말 나가시겠어요?" 확인창은 더 이상 필요 없어서 제거함
-document.getElementById("btn-status").addEventListener("click", () => { statusWeekOffset = 0; showView("view-status"); });
+document.getElementById("btn-status").addEventListener("click", () => { statusWeekOffset = 0; memoStatusWeekOffset = 0; showView("view-status"); });
 document.getElementById("btn-mypilsa").addEventListener("click", () => { weekOffset = 0; showView("view-mypilsa"); });
+document.getElementById("btn-memo").addEventListener("click", () => { memoWeekOffset = 0; showView("view-memo"); });
 document.getElementById("btn-admin").addEventListener("click", () => showView("view-admin"));
 document.getElementById("btn-logout").addEventListener("click", () => logout());
 
@@ -152,6 +155,18 @@ document.getElementById("btn-logout").addEventListener("click", () => logout());
    현황 페이지
    =========================================================== */
 let statusData = null; // 마지막으로 불러온 /status 응답 — 주 이동 시 다시 불러오지 않고 재사용
+let statusTab = "pilsa"; // 현황은 필사 / 암기 두 탭으로 나뉜다
+
+function renderStatusTab(){
+  document.querySelectorAll(".tabs__btn[data-status-tab]").forEach(b =>
+    b.classList.toggle("is-active", b.dataset.statusTab === statusTab));
+  document.getElementById("status-pilsa").hidden = statusTab !== "pilsa";
+  document.getElementById("status-memo").hidden = statusTab !== "memo";
+  if (statusTab === "pilsa") renderStatus(); else renderMemoStatus();
+}
+document.querySelectorAll(".tabs__btn[data-status-tab]").forEach(btn => {
+  btn.addEventListener("click", () => { statusTab = btn.dataset.statusTab; renderStatusTab(); });
+});
 
 async function renderStatus(){
   const list = document.getElementById("status-list");
@@ -173,9 +188,8 @@ async function renderStatus(){
 function renderStatusList(){
   const list = document.getElementById("status-list");
   if (!statusData) return;
-  const { users, submissions, startDate, totalChapters, openUntil } = statusData;
+  const { users, submissions, startDate, totalChapters } = statusData;
   const today = toISODate(new Date());
-  const previewEnd = openUntil || addDays(today, 1); // 관리자가 정한 마감일 — 없으면 기본값(내일까지)
   const days = getWeekDates(statusWeekOffset);
 
   list.innerHTML = users.map(u => {
@@ -184,12 +198,10 @@ function renderStatusList(){
     const cells = days.map(d => {
       const dayIndex = dateToDayIndex(d, startDate);
       const done = dayIndex !== null && sub[dayIndex];
-      const isFuture = d > previewEnd;
+      // 한 주가 통째로 열려 있어서 미리 한 날은 ⭕로 보이고, ❌는 그 날짜가 실제로 된 뒤에만 붙인다
       let cls = "", mark = "-";
-      if (!isFuture && dayIndex !== null){
-        mark = done ? "⭕" : "❌";
-        cls = done ? "is-done" : "is-fail";
-      }
+      if (done){ mark = "⭕"; cls = "is-done"; }
+      else if (dayIndex !== null && d <= today){ mark = "❌"; cls = "is-fail"; }
       return `<td class="${cls}">${mark}</td>`;
     }).join("");
 
@@ -211,24 +223,26 @@ function renderStatusList(){
 // 평균 달성률은 그 주에서 계산 가능했던(배정이 있고 이미 지난) 요일들의 평균이다.
 function renderStatusWeekBox(){
   if (!statusData) return;
-  const { users, submissions, startDate, openUntil } = statusData;
+  const { users, submissions, startDate } = statusData;
   const days = getWeekDates(statusWeekOffset);
   const today = toISODate(new Date());
-  const previewEnd = openUntil || addDays(today, 1); // 관리자가 정한 마감일 — 없으면 기본값(내일까지)
   const dayLabels = ["일","월","화","수","목","금","토"];
   const totalUsers = users.length;
 
   document.getElementById("status-week-range").textContent = `${days[0]} ~ ${days[6]}`;
 
   const dayRow = [`<th>요일</th>`];
+  const chapRow = [`<th>필사</th>`]; // 그 요일에 어떤 장을 필사하는지
   const rateRow = [`<th>달성률</th>`];
   const applicableRates = [];
 
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
     const dayIndex = dateToDayIndex(d, startDate);
-    const isFuture = d > previewEnd;
-    const hasAssignment = dayIndex !== null && getAssignmentForDayIndex(dayIndex).length > 0;
+    const isFuture = d > today; // 아직 안 온 날은 (미리 한 사람이 있어도) 달성률을 매기지 않는다
+    const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
+    const hasAssignment = pair.length > 0;
+    chapRow.push(`<td>${formatAssignmentLabelHTML(pair)}</td>`);
 
     if (!hasAssignment || isFuture || totalUsers === 0){
       rateRow.push(`<td>-</td>`);
@@ -242,6 +256,7 @@ function renderStatusWeekBox(){
 
   document.getElementById("status-week-table").querySelector("tbody").innerHTML =
     `<tr class="row-day">${dayRow.join("")}</tr>
+     <tr class="row-label">${chapRow.join("")}</tr>
      <tr class="row-rate">${rateRow.join("")}</tr>`;
 
   const avg = applicableRates.length
@@ -258,8 +273,8 @@ document.getElementById("status-week-next").addEventListener("click", () => { st
 
 function calcProgressPct(userName, today, submissions, startDate, totalChapters){
   if (!startDate || today < startDate) return 0;
-  const totalDayIndex = Math.floor((new Date(today) - new Date(startDate)) / 86400000);
-  const totalAssignedDays = Math.min(totalDayIndex + 1, totalChapters);
+  // 오늘까지 배정된 장 수 (평일에만 배정되는 기간의 주말은 세지 않는다)
+  const totalAssignedDays = Math.min(countAssignedBefore(addDays(today, 1), startDate), totalChapters);
   if (totalAssignedDays <= 0) return 0;
   const sub = submissions[userName] || {};
   let done = 0;
@@ -277,6 +292,13 @@ function formatAssignmentLabelHTML(pair){
   return `${pair[0].book}<br>${pair[0].chapter}장`;
 }
 
+// 미리 필사할 수 있는 마지막 날짜 — 기본은 이번 주 토요일(이번 주 분량은 전부 열림).
+// 관리자가 "미리 열기 마감일"을 그보다 뒤로 정해두면 그 날짜까지 더 열린다
+function getPreviewEnd(openUntil){
+  const thisSaturday = getWeekDates(0)[6];
+  return openUntil && openUntil > thisSaturday ? openUntil : thisSaturday;
+}
+
 function getWeekDates(offset){
   // 이번 주 일요일부터 토요일까지 7일 (offset주 이동)
   const now = new Date();
@@ -286,11 +308,6 @@ function getWeekDates(offset){
     const d = new Date(sunday); d.setDate(sunday.getDate() + i);
     return toISODate(d);
   });
-}
-
-function dateToDayIndex(dateStr, startDate){
-  if (!startDate || dateStr < startDate) return null;
-  return Math.floor((new Date(dateStr) - new Date(startDate)) / 86400000);
 }
 
 async function renderWeek(){
@@ -309,7 +326,7 @@ async function renderWeek(){
   const me = getCurrentUser();
   const mySub = submissions[me.name] || {};
   const today = toISODate(new Date());
-  const previewEnd = openUntil || addDays(today, 1); // 관리자가 정한 마감일 — 없으면 기본값(내일까지)
+  const previewEnd = getPreviewEnd(openUntil);
   const dayLabels = ["일","월","화","수","목","금","토"];
 
   const dayRow = [`<th>요일</th>`];
@@ -332,7 +349,8 @@ async function renderWeek(){
     } else {
       const done = !!mySub[dayIndex];
       chapRow.push(`<td data-day-index="${dayIndex}" data-done="${done}">${label}</td>`);
-      doneRow.push(`<td class="${done ? "is-done" : "is-fail"}">${done ? "⭕" : "❌"}</td>`);
+      // 열려 있어도 아직 안 온 날은 ❌ 대신 "-" (그 날짜가 되면 ❌)
+      doneRow.push(done ? `<td class="is-done">⭕</td>` : d <= today ? `<td class="is-fail">❌</td>` : `<td>-</td>`);
     }
   });
 
@@ -366,8 +384,7 @@ function renderIncompleteWarning(startDate, sub){
 function findOldestIncompleteDayIndex(startDate, sub){
   if (!startDate) return null;
   const thisWeekSunday = toISODate(startOfWeek(new Date()));
-  const maxDayIndex = dateToDayIndex(thisWeekSunday, startDate);
-  if (maxDayIndex === null) return null;
+  const maxDayIndex = countAssignedBefore(thisWeekSunday, startDate); // 지난 주까지 배정된 장 수
   for (let i = 0; i < maxDayIndex; i++){
     if (getAssignmentForDayIndex(i).length && !sub[i]) return i;
   }
@@ -381,7 +398,7 @@ document.getElementById("btn-jump-oldest").addEventListener("click", async () =>
   const sub = data.submissions[me.name] || {};
   const idx = findOldestIncompleteDayIndex(data.startDate, sub);
   if (idx === null) return;
-  const targetDate = addDays(data.startDate, idx);
+  const targetDate = dayIndexToDate(idx, data.startDate);
   const now = new Date(); const today0 = new Date(toISODate(now));
   const target = new Date(targetDate);
   const diffWeeks = Math.floor((startOfWeek(target) - startOfWeek(today0)) / (7 * 86400000));
@@ -423,8 +440,16 @@ async function openPilsaPanel(dayIndex, done){
     return;
   }
 
+  // 맨 끝의 빈 칸(spacer)은 마지막 절도 원문 칸의 맨 위까지 올라올 수 있게 하는 여백 — showSourceVerse 참고
   document.getElementById("pilsa-panel__text").innerHTML =
-    verses.map(v => `<div>${v.verse} ${v.text}</div>`).join("");
+    // 아래 입력칸(verse-input-row)과 똑같은 배치: 왼쪽에 "N절", 오른쪽에 같은 폭·같은 글자 크기의 본문
+    // — 원문과 내가 쓰는 글이 같은 자리에서 시작하고 같은 곳에서 줄이 바뀐다
+    verses.map((v, i) => `
+      <div class="source-row" data-source-idx="${i}">
+        <span class="verse-input-row__num">${v.verse}절</span>
+        <div class="source-row__text">${v.text}</div>
+      </div>`).join("") +
+    `<div class="pilsa-panel__text-spacer" aria-hidden="true"></div>`;
 
   openAssignment.verses = verses;
   if (!openAssignment.done){
@@ -459,6 +484,27 @@ function saveDraftVerse(dayIndex, verse, text){
 }
 function clearDraft(dayIndex){
   localStorage.removeItem(draftKey(dayIndex));
+}
+
+// 지금 입력하려는 절이 위쪽 원문 칸의 맨 윗줄에 오도록 원문을 스크롤한다
+// (1절 칸을 누르면 원문도 1절부터, 10절 칸을 누르면 10절부터 보이게)
+function showSourceVerse(index){
+  const box = document.getElementById("pilsa-panel__text");
+  const target = box.querySelector(`[data-source-idx="${index}"]`);
+  if (!target) return;
+
+  box.querySelectorAll(".is-current").forEach(el => el.classList.remove("is-current"));
+  target.classList.add("is-current");
+
+  // 뒤쪽 절은 그 아래 남은 원문이 칸 높이보다 짧아서 맨 위까지 못 올라오므로, 모자란 만큼 끝에 여백을 둔다
+  const spacer = box.querySelector(".pilsa-panel__text-spacer");
+  const last = spacer.previousElementSibling;
+  spacer.style.height = Math.max(0, box.clientHeight - last.offsetHeight) + "px";
+
+  // 그 절의 첫 줄을 칸의 맨 위에 정확히 맞춘다. 칸 높이와 모든 절의 높이가 줄 높이의 배수라서(style.css 참고)
+  // 이렇게 맞추면 칸 맨 아래도 줄 경계에서 끊겨, 위아래 어디에도 반쯤 잘린 글자가 보이지 않는다
+  const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+  box.scrollTo({ top, behavior: "smooth" });
 }
 
 // 복사·붙여넣기 금지 — 절 입력칸이 장을 열 때마다 새로 만들어지므로 만들어질 때마다 걸어준다.
@@ -555,6 +601,8 @@ function buildTypingArea(){
       saveDraftVerse(openAssignment.dayIndex, v.verse, textarea.value);
     });
 
+    textarea.addEventListener("focus", () => showSourceVerse(i));
+
     // 칸을 벗어날 때(Enter로 다음 절 이동, 다른 곳 클릭, 제출 버튼 클릭 등)는 스페이스 없이
     // 끝난 마지막 단어도 확정해서 검사한다
     textarea.addEventListener("blur", () => {
@@ -610,13 +658,460 @@ document.getElementById("btn-submit").addEventListener("click", async () => {
 });
 
 /* ===========================================================
+   계시록 암기
+   화면은 3단계: 전체 장(1~22장 박스) → 한 장의 절 목록(체크박스) → 한 절 보기/테스트
+   =========================================================== */
+let memoData = null;          // 마지막으로 불러온 /memorize 응답 { users, checks, startDate, startChapter, totalVerses }
+let memoWeekOffset = 0;       // 계시록 암기 화면의 주간 박스: 0 = 이번 주
+let memoStatusWeekOffset = 0; // 현황(암기 탭)
+let memoChapterNum = null;    // 지금 열려 있는 장
+let memoOpen = null;          // 지금 열려 있는 절 { chapter, verse, text }
+const memoTextCache = {};     // { [장]: [{ verse, text }] } — 한 번 불러온 본문은 다시 안 부른다
+const MEMO_WEEKDAYS = ["월","화","수","목","금"];
+const MEMO_DAY_LABELS = ["일","월","화","수","목","금","토"]; // 화면 표는 필사와 똑같이 일~토 7칸 (일·토는 배정이 없어 "-")
+
+function memoKey(chapter, verse){ return `${chapter}:${verse}`; }
+function memoChecksOf(name){ return new Set((memoData && memoData.checks[name]) || []); }
+
+// 그 주의 일~토 날짜와 요일별 배정 절(주말처럼 배정 없는 날은 null).
+// 배정은 따로 저장하지 않고, 관리자가 정한 암기 시작일부터 평일마다 한 절씩 순서대로 계산한다
+function getMemoWeek(offset){
+  const dates = getWeekDates(offset);
+  const { startDate, startChapter } = memoData || {};
+  const slots = dates.map(d => getMemoVerseForDate(d, startDate, startChapter));
+  return { dates, slots };
+}
+
+function memoNoPlanMessage(){
+  return memoData && memoData.startDate
+    ? "이 주에는 배정된 암기 절이 없어요."
+    : "아직 관리자가 암기 시작일을 정하지 않았어요.";
+}
+
+// 그 주에 지정된 절 중 체크된 비율 (지정된 절이 없으면 null)
+function calcMemoWeekPct(checks, slots){
+  const planned = slots.filter(Boolean);
+  if (!planned.length) return null;
+  const done = planned.filter(s => checks.has(memoKey(s.chapter, s.verse))).length;
+  return Math.round((done / planned.length) * 100);
+}
+
+// 체크했으면 ⭕, 아직 안 했는데 그 요일이 이미 됐으면 ❌, 아직 안 온 요일이면 -
+function memoMarkCell(slot, checks, date, today){
+  if (!slot) return `<td>-</td>`;
+  if (checks.has(memoKey(slot.chapter, slot.verse))) return `<td class="is-done">⭕</td>`;
+  return date <= today ? `<td class="is-fail">❌</td>` : `<td>-</td>`;
+}
+
+function showMemoSection(name){
+  ["home", "chapter", "verse"].forEach(s => document.getElementById(`memo-${s}`).hidden = s !== name);
+}
+
+async function renderMemo(){
+  showMemoSection("home");
+  const grid = document.getElementById("memo-chapter-grid");
+  grid.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  try { memoData = await api("/memorize"); }
+  catch (err){ grid.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  renderMemoHome();
+}
+
+/* ---------- 1단계: 주간 박스 + 1~22장 박스 ---------- */
+function renderMemoHome(){
+  showMemoSection("home");
+  renderMemoWeekBox();
+
+  const mine = memoChecksOf(getCurrentUser().name);
+  const doneByChapter = {};
+  mine.forEach(key => { const c = key.split(":")[0]; doneByChapter[c] = (doneByChapter[c] || 0) + 1; });
+
+  const totalPct = Math.round((mine.size / REVELATION_TOTAL_VERSES) * 100);
+  document.getElementById("memo-total").innerHTML =
+    `전체 진행 <span class="status-week-avg__num">${mine.size}</span> / ${REVELATION_TOTAL_VERSES}절 (${totalPct}%)`;
+
+  const grid = document.getElementById("memo-chapter-grid");
+  grid.innerHTML = REVELATION.verses.map((count, i) => {
+    const chapter = i + 1;
+    const done = doneByChapter[chapter] || 0;
+    const pct = Math.round((done / count) * 100);
+    return `
+      <button type="button" class="memo-chapter-box${done === count ? " is-complete" : ""}" data-chapter="${chapter}">
+        <span class="memo-chapter-box__num">${chapter}장</span>
+        <span class="memo-chapter-box__count">${done} / ${count}절</span>
+        <span class="memo-chapter-box__bar"><i style="width:${pct}%"></i></span>
+      </button>`;
+  }).join("");
+  grid.querySelectorAll("[data-chapter]").forEach(box =>
+    box.addEventListener("click", () => openMemoChapter(Number(box.dataset.chapter))));
+}
+
+function renderMemoWeekBox(){
+  const { dates, slots } = getMemoWeek(memoWeekOffset);
+  const mine = memoChecksOf(getCurrentUser().name);
+  const today = toISODate(new Date());
+  document.getElementById("memo-week-range").textContent = `${dates[0]} ~ ${dates[6]}`;
+
+  const dayRow = [`<th>요일</th>`];
+  const verseRow = [`<th>암기</th>`];
+  const doneRow = [`<th>완료</th>`];
+  slots.forEach((slot, i) => {
+    dayRow.push(`<td>${MEMO_DAY_LABELS[i]}</td>`);
+    verseRow.push(slot
+      ? `<td data-chapter="${slot.chapter}" data-verse="${slot.verse}">${slot.chapter}장<br>${slot.verse}절</td>`
+      : `<td>-</td>`);
+    doneRow.push(memoMarkCell(slot, mine, dates[i], today));
+  });
+
+  const table = document.getElementById("memo-week-table");
+  table.querySelector("tbody").innerHTML =
+    `<tr class="row-day">${dayRow.join("")}</tr>
+     <tr class="row-chapter">${verseRow.join("")}</tr>
+     <tr class="row-done">${doneRow.join("")}</tr>`;
+  table.querySelectorAll("td[data-chapter]").forEach(td =>
+    td.addEventListener("click", () => openMemoVerse(Number(td.dataset.chapter), Number(td.dataset.verse))));
+
+  // 표 아래에는 배정이 없는 주일 때의 안내만 띄운다 (주간 진행률은 현황의 암기 탭에서 본다)
+  const noteEl = document.getElementById("memo-week-pct");
+  const hasPlan = slots.some(Boolean);
+  noteEl.textContent = hasPlan ? "" : memoNoPlanMessage();
+  noteEl.hidden = hasPlan;
+}
+
+document.getElementById("memo-week-prev").addEventListener("click", () => { memoWeekOffset--; renderMemoWeekBox(); });
+document.getElementById("memo-week-next").addEventListener("click", () => { memoWeekOffset++; renderMemoWeekBox(); });
+
+/* ---------- 2단계: 한 장의 절 목록 ---------- */
+function openMemoChapter(chapter){
+  memoChapterNum = chapter;
+  memoOpen = null;
+  renderMemoChapter();
+  showMemoSection("chapter");
+}
+
+function renderMemoChapter(){
+  const chapter = memoChapterNum;
+  const count = REVELATION.verses[chapter - 1];
+  const mine = memoChecksOf(getCurrentUser().name);
+  const thisWeek = new Set(getMemoWeek(0).slots.filter(Boolean).map(s => memoKey(s.chapter, s.verse)));
+
+  let doneCount = 0;
+  const html = Array.from({ length: count }, (_, i) => {
+    const verse = i + 1;
+    const key = memoKey(chapter, verse);
+    const done = mine.has(key);
+    if (done) doneCount++;
+    return `
+      <div class="memo-verse-item${done ? " is-done" : ""}">
+        <input type="checkbox" data-verse="${verse}" ${done ? "checked" : ""} aria-label="${verse}절 암기 완료">
+        <button type="button" class="memo-verse-item__btn" data-verse="${verse}">${verse}절${
+          thisWeek.has(key) ? `<span class="memo-badge">이번 주</span>` : ""}</button>
+      </div>`;
+  }).join("");
+
+  document.getElementById("memo-chapter-title").textContent = `${REVELATION.book} ${chapter}장`;
+  document.getElementById("memo-chapter-count").textContent = `${doneCount} / ${count}절`;
+  const list = document.getElementById("memo-verse-list");
+  list.innerHTML = html;
+
+  list.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", async () => {
+    cb.disabled = true;
+    await setMemoCheck(chapter, Number(cb.dataset.verse), cb.checked);
+    if (memoChapterNum === chapter && !memoOpen) renderMemoChapter(); // 실패했으면 원래 상태로 다시 그려진다
+  }));
+  list.querySelectorAll(".memo-verse-item__btn").forEach(btn =>
+    btn.addEventListener("click", () => openMemoVerse(chapter, Number(btn.dataset.verse))));
+}
+
+// 화면에는 먼저 반영하고 서버에 저장한다 — 저장에 실패하면 되돌리고 알려준다
+async function setMemoCheck(chapter, verse, done){
+  const name = getCurrentUser().name;
+  const key = memoKey(chapter, verse);
+  const apply = on => {
+    const set = memoChecksOf(name);
+    if (on) set.add(key); else set.delete(key);
+    memoData.checks[name] = [...set];
+  };
+  apply(done);
+  try {
+    await api("/memorize", { method: "POST", body: { action: "check", chapter, verse, done } });
+    return true;
+  } catch (err) {
+    apply(!done);
+    showAlertModal(err.message);
+    return false;
+  }
+}
+
+document.getElementById("btn-memo-back-home").addEventListener("click", renderMemoHome);
+
+/* ---------- 3단계: 한 절 보기 / 가리고 테스트 ---------- */
+async function getRevelationChapterText(chapter){
+  if (memoTextCache[chapter]) return memoTextCache[chapter];
+  const data = await api(`/chapters?book=${encodeURIComponent(REVELATION.book)}&chapter=${chapter}`);
+  if (data.verses.length) memoTextCache[chapter] = data.verses; // 아직 등록 전이면 나중에 다시 조회하게 캐시하지 않음
+  return data.verses;
+}
+
+async function openMemoVerse(chapter, verse){
+  memoChapterNum = chapter;
+  const open = memoOpen = { chapter, verse, text: "" };
+  const textEl = document.getElementById("memo-verse-text");
+
+  document.getElementById("memo-verse-title").textContent = `${REVELATION.book} ${chapter}장 ${verse}절`;
+  document.getElementById("memo-verse-check").checked =
+    memoChecksOf(getCurrentUser().name).has(memoKey(chapter, verse));
+  textEl.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  setMemoMode("none");
+  showMemoSection("verse");
+
+  let verses;
+  try { verses = await getRevelationChapterText(chapter); }
+  catch (err){
+    if (memoOpen === open) textEl.innerHTML = `<p class="form-error">${err.message}</p>`;
+    return;
+  }
+  if (memoOpen !== open) return; // 불러오는 사이에 다른 절/화면으로 이동함
+
+  const found = verses.find(v => v.verse === verse);
+  if (!found){
+    textEl.innerHTML = `<p class="form-note">아직 관리자가 이 절의 본문을 등록하지 않았어요.</p>`;
+    return;
+  }
+  open.text = found.text;
+  textEl.textContent = found.text;
+  setMemoMode("view");
+}
+
+// none: 본문 없음(불러오는 중/미등록) · view: 본문 보기 · test: 가리고 입력 · result: 채점 결과
+function setMemoMode(mode){
+  const hidden = mode === "test" || mode === "result";
+  document.getElementById("memo-verse-text").hidden = hidden;
+  document.getElementById("memo-test").hidden = mode !== "test";
+  document.getElementById("memo-result").hidden = mode !== "result";
+  document.getElementById("btn-memo-hide").hidden = mode !== "view";
+  document.getElementById("btn-memo-grade").hidden = mode !== "test";
+  document.getElementById("btn-memo-retry").hidden = mode !== "result";
+  document.getElementById("btn-memo-show").hidden = !hidden;
+  if (mode === "test"){
+    const input = document.getElementById("memo-test-input");
+    input.value = "";
+    input.focus();
+  }
+}
+
+// 두 문자열을 글자 단위로 맞춰 본다(LCS) — 양쪽에서 서로 짝이 맞은 글자만 true.
+// 필사처럼 어절 단위로 보면 한 글자만 틀려도 단어 전체가 빨개지고, 자리(index)만 비교하면
+// 한 글자 빠뜨렸을 때 그 뒤가 전부 틀린 걸로 나와서, 실제로 다른 글자만 짚어주기 위함
+function diffChars(a, b){
+  const A = Array.from(a), B = Array.from(b);
+  const n = A.length, m = B.length;
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1)); // dp[i][j] = A[i:]와 B[j:]의 LCS 길이
+  for (let i = n - 1; i >= 0; i--){
+    for (let j = m - 1; j >= 0; j--){
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const aKeep = new Array(n).fill(false), bKeep = new Array(m).fill(false);
+  let i = 0, j = 0;
+  while (i < n && j < m){
+    if (A[i] === B[j]){ aKeep[i++] = true; bKeep[j++] = true; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
+  }
+  return { aKeep, bKeep };
+}
+
+function markDiffChars(text, keep){
+  return Array.from(text)
+    .map((ch, i) => keep[i] ? escapeHtml(ch) : `<span class="is-wrong">${escapeHtml(ch)}</span>`)
+    .join("");
+}
+
+function gradeMemoTest(){
+  if (!memoOpen || document.getElementById("memo-test").hidden) return;
+  const input = document.getElementById("memo-test-input");
+  const typed = normalizeVerseText(input.value);
+  if (!typed){ input.focus(); return; }
+  const source = normalizeVerseText(memoOpen.text);
+  const correct = typed === source;
+  const { aKeep, bKeep } = diffChars(typed, source);
+
+  document.getElementById("memo-result").innerHTML = correct
+    ? `<p class="memo-result__verdict is-correct">⭕ 정확해요! 다 외웠다면 '암기 완료'를 체크하세요.</p>
+       <div class="memo-result__text">${escapeHtml(typed)}</div>`
+    : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요. 빨간 글자를 확인해보세요.</p>
+       <div class="memo-result__label">내가 쓴 답 <small>(빨간 글자 = 틀리게 쓴 곳)</small></div>
+       <div class="memo-result__text">${markDiffChars(typed, aKeep)}</div>
+       <div class="memo-result__label">정답 <small>(빨간 글자 = 빠뜨리거나 다르게 쓴 곳)</small></div>
+       <div class="memo-result__text">${markDiffChars(source, bKeep)}</div>`;
+  setMemoMode("result");
+}
+
+document.getElementById("btn-memo-hide").addEventListener("click", () => setMemoMode("test"));
+document.getElementById("btn-memo-show").addEventListener("click", () => setMemoMode("view"));
+document.getElementById("btn-memo-retry").addEventListener("click", () => setMemoMode("test"));
+document.getElementById("btn-memo-grade").addEventListener("click", gradeMemoTest);
+document.getElementById("btn-memo-back-chapter").addEventListener("click", () => openMemoChapter(memoChapterNum));
+preventPasteOn(document.getElementById("memo-test-input"));
+document.getElementById("memo-test-input").addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  setTimeout(gradeMemoTest, 0); // 한글 조합 중이던 마지막 글자가 확정된 뒤에 채점
+});
+document.getElementById("memo-verse-check").addEventListener("change", async e => {
+  const cb = e.target;
+  const open = memoOpen;
+  if (!open) return;
+  const done = cb.checked;
+  cb.disabled = true;
+  const ok = await setMemoCheck(open.chapter, open.verse, done);
+  cb.disabled = false;
+  if (!ok && memoOpen === open) cb.checked = !done;
+});
+
+/* ---------- 현황(암기 탭) ---------- */
+async function renderMemoStatus(){
+  const list = document.getElementById("memo-status-list");
+  list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  try { memoData = await api("/memorize"); }
+  catch (err){
+    list.innerHTML = `<p class="form-error">${err.message}</p>`;
+    document.getElementById("memo-status-week-avg").textContent = "";
+    return;
+  }
+  renderMemoStatusWeek();
+}
+
+// 요일별 달성률 = 그 요일에 지정된 절을 체크한 인원 / 전체 참여 인원.
+// 주간 달성률 = 그 주에 지정된 모든 절 × 전체 인원 중 체크된 비율
+function renderMemoStatusWeek(){
+  if (!memoData) return;
+  const { users } = memoData;
+  const { dates, slots } = getMemoWeek(memoStatusWeekOffset);
+  const today = toISODate(new Date());
+  const checksByUser = users.map(u => memoChecksOf(u.name));
+  document.getElementById("memo-status-week-range").textContent = `${dates[0]} ~ ${dates[6]}`;
+
+  const dayCells = MEMO_DAY_LABELS.map(d => `<td>${d}</td>`).join("");
+  // 필사 탭의 "필사" 줄과 같은 모양(굵게, 두 줄)으로 — 탭을 넘겨도 박스 크기가 같게
+  const verseCells = slots.map(s => `<td>${s ? `${s.chapter}장<br>${s.verse}절` : "-"}</td>`).join("");
+  let doneTotal = 0;
+  const rateCells = slots.map(s => {
+    if (!s || !users.length) return `<td>-</td>`;
+    const doneCount = checksByUser.filter(set => set.has(memoKey(s.chapter, s.verse))).length;
+    doneTotal += doneCount;
+    return `<td>${Math.round((doneCount / users.length) * 100)}%</td>`;
+  }).join("");
+
+  document.getElementById("memo-status-week-table").querySelector("tbody").innerHTML =
+    `<tr class="row-day"><th>요일</th>${dayCells}</tr>
+     <tr class="row-label"><th>암기</th>${verseCells}</tr>
+     <tr class="row-rate"><th>달성률</th>${rateCells}</tr>`;
+
+  const plannedCount = slots.filter(Boolean).length;
+  const weekAvg = plannedCount && users.length
+    ? Math.round((doneTotal / (plannedCount * users.length)) * 100) + "%"
+    : "-";
+  document.getElementById("memo-status-week-avg").innerHTML = plannedCount
+    ? `주간 달성률 <span class="status-week-avg__num">${weekAvg}</span>`
+    : memoNoPlanMessage();
+
+  document.getElementById("memo-status-list").innerHTML = users.map((u, idx) => {
+    const checks = checksByUser[idx];
+    const pct = calcMemoWeekPct(checks, slots);
+    const cells = slots.map((s, i) => memoMarkCell(s, checks, dates[i], today)).join("");
+    return `
+      <div class="status-card">
+        <div class="status-card__head">
+          <span class="status-card__name">${u.name}<span class="status-card__nick">${u.nickname ? "· " + u.nickname : ""}</span></span>
+          <span class="status-card__pct status-card__pct--memo">주간 <span class="status-card__pct-num">${pct === null ? "-" : pct + "%"}</span>
+            · 전체 <span class="status-card__pct-num">${checks.size}</span>/${REVELATION_TOTAL_VERSES}</span>
+        </div>
+        <table>
+          <tr><th>요일</th>${MEMO_DAY_LABELS.map(d => `<th>${d}</th>`).join("")}</tr>
+          <tr><th>완료</th>${cells}</tr>
+        </table>
+      </div>`;
+  }).join("") || `<p class="form-note">아직 승인된 참여자가 없어요.</p>`;
+}
+
+document.getElementById("memo-status-week-prev").addEventListener("click", () => { memoStatusWeekOffset--; renderMemoStatusWeek(); });
+document.getElementById("memo-status-week-next").addEventListener("click", () => { memoStatusWeekOffset++; renderMemoStatusWeek(); });
+
+/* ---------- 관리자: 암기 배정 ---------- */
+// 시작일(과 시작 장)만 정하면 그날부터 평일(월~금)마다 시작 장 1절부터 한 절씩 자동으로 배정된다
+async function loadAdminMemoPlan(){
+  const statusEl = document.getElementById("memoplan-status");
+  statusEl.textContent = "불러오는 중…";
+  try { memoData = await api("/memorize"); }
+  catch (err){ statusEl.textContent = err.message; return; }
+  statusEl.textContent = "";
+  document.getElementById("memoplan-start-date").value = memoData.startDate || "";
+  const chapterSel = document.getElementById("memoplan-start-chapter");
+  chapterSel.innerHTML = REVELATION.verses.map((_, i) => `<option value="${i + 1}">${i + 1}장</option>`).join("");
+  chapterSel.value = memoData.startChapter;
+  renderMemoPlanPreview(memoData.startDate, memoData.startChapter);
+}
+
+function renderMemoPlanPreview(startDate, startChapter){
+  const el = document.getElementById("memoplan-preview");
+  if (!startDate){ el.innerHTML = ""; return; }
+
+  // 시작일이 주말이면 다음 월요일이 실제 첫날. 마지막 날은 계산식 대신 실제 배정을 따라가며 찾는다
+  let first = startDate;
+  while (!getMemoVerseForDate(first, startDate, startChapter)) first = addDays(first, 1);
+  let last = first;
+  for (let remaining = REVELATION_SEQUENCE.length - 1; remaining > 0; ){
+    last = addDays(last, 1);
+    if (getMemoVerseForDate(last, startDate, startChapter)) remaining--;
+  }
+  const label = date => { const v = getMemoVerseForDate(date, startDate, startChapter); return `${v.chapter}장 ${v.verse}절`; };
+
+  const monday = addDays(first, 1 - new Date(first + "T00:00:00").getDay());
+  const rows = [0, 1].map(week => {
+    const cells = MEMO_WEEKDAYS.map((_, i) => {
+      const v = getMemoVerseForDate(addDays(monday, week * 7 + i), startDate, startChapter);
+      return `<td>${v ? `${v.chapter}:${v.verse}` : "-"}</td>`;
+    }).join("");
+    return `<tr><td>${addDays(monday, week * 7).slice(5)}~</td>${cells}</tr>`;
+  }).join("");
+
+  el.innerHTML = `
+    <table class="week-table" style="margin-top:14px;">
+      <tr><th>주</th>${MEMO_WEEKDAYS.map(d => `<th>${d}</th>`).join("")}</tr>${rows}
+    </table>
+    <p class="form-note">최초 2주 미리보기입니다. 총 ${REVELATION_SEQUENCE.length}절 — ${first}에 ${label(first)}로 시작해 ${last}에 ${label(last)}로 끝나요.</p>`;
+}
+
+document.getElementById("btn-memoplan-save").addEventListener("click", async () => {
+  const startDate = document.getElementById("memoplan-start-date").value;
+  const startChapter = Number(document.getElementById("memoplan-start-chapter").value);
+  const statusEl = document.getElementById("memoplan-status");
+  const btn = document.getElementById("btn-memoplan-save");
+  if (!startDate){ statusEl.textContent = "시작일을 선택해주세요."; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = "저장 중…";
+  try {
+    await api("/memorize", { method: "POST", body: { action: "setStartDate", startDate, startChapter } });
+    if (memoData){ memoData.startDate = startDate; memoData.startChapter = startChapter; }
+    statusEl.textContent = "저장 완료.";
+    renderMemoPlanPreview(startDate, startChapter);
+  } catch (err) {
+    statusEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ===========================================================
    관리자
    =========================================================== */
 document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(b => b.classList.remove("is-active"));
     btn.classList.add("is-active");
-    ["pending","members","assign","content"].forEach(t =>
+    ["pending","members","assign","content","memoplan"].forEach(t =>
       document.getElementById(`admin-${t}`).hidden = t !== btn.dataset.adminTab);
   });
 });
@@ -634,6 +1129,7 @@ async function renderAdmin(){
   document.getElementById("assign-start-date").value = data.startDate || "";
   renderAssignPreview(data.startDate);
   document.getElementById("assign-open-until").value = data.openUntil || "";
+  loadAdminMemoPlan();
 }
 
 function renderAdminPending(users){
@@ -667,27 +1163,31 @@ function renderAdminPending(users){
 }
 
 function renderAdminMembers(users){
-  const members = users.filter(u => u.status === "approved");
+  // 삭제는 없고 활성/비활성만 바꾼다 — 비활성 회원은 로그인과 현황에서 빠지지만 기록은 남는다
+  const members = users.filter(u => u.status === "approved" || u.status === "inactive");
   const el = document.getElementById("admin-members");
-  el.innerHTML = members.map(u => `
-    <div class="admin-row admin-row--draggable" data-name="${u.name}">
+  el.innerHTML = members.map(u => {
+    const active = u.status === "approved";
+    return `
+    <div class="admin-row admin-row--draggable${active ? "" : " is-inactive"}" data-name="${u.name}">
       <span class="drag-handle" title="드래그해서 순서 변경">⠿</span>
-      <span class="admin-row__name">${u.name}</span>
+      <span class="admin-row__name">${u.name}${active ? "" : ` <small class="admin-row__state">비활성</small>`}</span>
       <input type="text" value="${u.nickname}" data-editnick="${u.name}">
-      <button class="btn btn--ghost" data-remove="${u.name}">삭제</button>
-    </div>`).join("");
+      <button class="btn btn--ghost" data-set-active="${u.name}" data-active="${!active}">${active ? "비활성화" : "활성화"}</button>
+    </div>`;
+  }).join("") || `<p class="form-note">회원이 없어요.</p>`;
 
   el.querySelectorAll("[data-editnick]").forEach(inp => inp.addEventListener("change", async () => {
     try {
       await api("/admin", { method: "POST", body: { action: "setNickname", name: inp.dataset.editnick, nickname: inp.value } });
     } catch (err) { alert(err.message); }
   }));
-  el.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", async () => {
-    if (!confirm(`${btn.dataset.remove} 님을 삭제할까요?`)) return;
+  el.querySelectorAll("[data-set-active]").forEach(btn => btn.addEventListener("click", async () => {
+    btn.disabled = true;
     try {
-      await api("/admin", { method: "POST", body: { action: "remove", name: btn.dataset.remove } });
+      await api("/admin", { method: "POST", body: { action: "setActive", name: btn.dataset.setActive, active: btn.dataset.active === "true" } });
       renderAdmin();
-    } catch (err) { alert(err.message); }
+    } catch (err) { alert(err.message); btn.disabled = false; }
   }));
 
   initMemberDragReorder(el);
@@ -752,7 +1252,7 @@ document.getElementById("btn-assign-save").addEventListener("click", async () =>
 
 document.getElementById("assign-open-until").addEventListener("change", async e => {
   const input = e.target;
-  const openUntil = input.value; // 비우면 기본값(내일까지)으로 되돌아감
+  const openUntil = input.value; // 비우면 기본값(이번 주까지)으로 되돌아감
   input.disabled = true;
   try {
     await api("/admin", { method: "POST", body: { action: "setOpenUntil", openUntil } });
@@ -767,16 +1267,22 @@ document.getElementById("assign-open-until").addEventListener("change", async e 
 function renderAssignPreview(startDate){
   const el = document.getElementById("assign-preview");
   if (!startDate){ el.innerHTML = ""; return; }
+  // 이번 주 일요일(시작 전이면 시작일)부터 2주 — 주말처럼 배정이 없는 날은 "-"
+  const thisSunday = toISODate(startOfWeek(new Date()));
+  const from = startDate > thisSunday ? startDate : thisSunday;
+  const dayLabels = ["일","월","화","수","목","금","토"];
   const rows = Array.from({ length: 14 }, (_, i) => {
-    const date = addDays(startDate, i);
-    const label = formatAssignmentLabel(getAssignmentForDayIndex(i));
-    return `<tr><td>${date}</td><td>${label}</td></tr>`;
+    const date = addDays(from, i);
+    const dayIndex = dateToDayIndex(date, startDate);
+    const label = dayIndex === null ? "-" : formatAssignmentLabel(getAssignmentForDayIndex(dayIndex));
+    return `<tr><td>${date} (${dayLabels[new Date(date + "T00:00:00").getDay()]})</td><td>${label}</td></tr>`;
   }).join("");
+  const lastDate = dayIndexToDate(CHAPTER_SEQUENCE.length - 1, startDate);
   el.innerHTML = `
     <table class="week-table" style="margin-top:14px;">
       <tr><th>날짜</th><th>배정 장</th></tr>${rows}
     </table>
-    <p class="form-note">최초 2주 미리보기입니다. 총 ${CHAPTER_SEQUENCE.length}장 배정 완료.</p>`;
+    <p class="form-note">앞으로 2주 미리보기입니다. 총 ${CHAPTER_SEQUENCE.length}장 — ${lastDate}에 유다서 1장으로 끝나요.</p>`;
 }
 
 /* ---------- 관리자: 본문 입력 ---------- */
@@ -785,9 +1291,9 @@ function renderAssignPreview(startDate){
 // 안 누르고 저장하면 이전 장 내용이 새 장에 그대로 저장되는 사고가 날 수 있었다.
 (function initContentPicker(){
   const bookSel = document.getElementById("content-book");
-  bookSel.innerHTML = EPISTLES.map(e => `<option value="${e.book}">${e.book} (총 ${e.chapters}장)</option>`).join("");
+  bookSel.innerHTML = CONTENT_BOOKS.map(e => `<option value="${e.book}">${e.book} (총 ${e.chapters}장)</option>`).join("");
   bookSel.addEventListener("change", () => {
-    const meta = EPISTLES.find(e => e.book === bookSel.value);
+    const meta = CONTENT_BOOKS.find(e => e.book === bookSel.value);
     const chapterInput = document.getElementById("content-chapter");
     chapterInput.max = meta.chapters;
     if (Number(chapterInput.value) > meta.chapters) chapterInput.value = 1;
@@ -800,22 +1306,22 @@ function renderAssignPreview(startDate){
 function moveContentChapter(delta){
   const bookSel = document.getElementById("content-book");
   const chapterInput = document.getElementById("content-chapter");
-  const bookIdx = EPISTLES.findIndex(e => e.book === bookSel.value);
+  const bookIdx = CONTENT_BOOKS.findIndex(e => e.book === bookSel.value);
   let targetIdx = bookIdx;
   let chapter = Number(chapterInput.value) + delta;
 
   if (chapter < 1){
     targetIdx = bookIdx - 1;
     if (targetIdx < 0) return;
-    chapter = EPISTLES[targetIdx].chapters;
-  } else if (chapter > EPISTLES[bookIdx].chapters){
+    chapter = CONTENT_BOOKS[targetIdx].chapters;
+  } else if (chapter > CONTENT_BOOKS[bookIdx].chapters){
     targetIdx = bookIdx + 1;
-    if (targetIdx >= EPISTLES.length) return;
+    if (targetIdx >= CONTENT_BOOKS.length) return;
     chapter = 1;
   }
 
-  bookSel.value = EPISTLES[targetIdx].book;
-  chapterInput.max = EPISTLES[targetIdx].chapters;
+  bookSel.value = CONTENT_BOOKS[targetIdx].book;
+  chapterInput.max = CONTENT_BOOKS[targetIdx].chapters;
   chapterInput.value = chapter;
   loadChapterContent();
 }

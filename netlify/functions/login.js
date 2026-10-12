@@ -14,6 +14,7 @@ exports.handler = async (event) => {
     const user = users.find(u => u.name === name);
 
     if (!user) return json(401, { error: "회원 정보를 찾을 수 없어요." });
+    if (user.status === "inactive") return json(403, { error: "비활성화된 계정이에요. 관리자에게 문의해주세요." });
     if (user.status !== "approved") return json(403, { error: "관리자 승인 대기 중이에요." });
 
     const match = await bcrypt.compare(password, user.passwordHash);

@@ -14,11 +14,12 @@
   <header class="topbar" id="topbar" hidden>
     <div class="topbar__left">
       <button class="topbar__btn" id="btn-status" title="현황">현황</button>
-      <button class="topbar__btn" id="btn-mypilsa" title="내 필사">내 필사</button>
+      <button class="topbar__btn" id="btn-mypilsa" title="필사">필사</button>
+      <button class="topbar__btn" id="btn-memo" title="계시록 암기">계시록 암기</button>
     </div>
-    <div class="topbar__title">필사</div>
+    <div class="topbar__title" id="topbar-name"><!-- 로그인한 사람의 이름 (JS로 채움) --></div>
     <div class="topbar__right">
-      <button class="topbar__btn topbar__btn--admin" id="btn-admin" hidden title="관리자">관리자</button>
+      <button class="topbar__btn" id="btn-admin" hidden title="관리자">관리자</button>
       <button class="topbar__btn topbar__btn--logout" id="btn-logout" title="로그아웃">로그아웃</button>
     </div>
   </header>
@@ -47,29 +48,52 @@
     <section class="view" id="view-status" hidden>
       <h2 class="view-title">전체 현황</h2>
 
-      <div class="week-box" id="status-week-box">
-        <div class="week-box__nav">
-          <button id="status-week-prev" class="week-arrow" aria-label="이전 주">‹</button>
-          <span id="status-week-range" class="week-range">이번 주</span>
-          <button id="status-week-next" class="week-arrow" aria-label="다음 주">›</button>
-        </div>
-        <table class="week-table" id="status-week-table">
-          <tbody>
-            <tr class="row-day"><th>요일</th></tr>
-            <tr class="row-rate"><th>달성률</th></tr>
-          </tbody>
-        </table>
-        <p class="status-week-avg" id="status-week-avg"></p>
+      <div class="tabs">
+        <button class="tabs__btn is-active" data-status-tab="pilsa">필사</button>
+        <button class="tabs__btn" data-status-tab="memo">암기</button>
       </div>
 
-      <div class="status-list" id="status-list">
-        <!-- JS로 참여자 카드가 채워짐 -->
+      <div id="status-pilsa">
+        <div class="week-box" id="status-week-box">
+          <div class="week-box__nav">
+            <button id="status-week-prev" class="week-arrow" aria-label="이전 주">‹</button>
+            <span id="status-week-range" class="week-range">이번 주</span>
+            <button id="status-week-next" class="week-arrow" aria-label="다음 주">›</button>
+          </div>
+          <table class="week-table" id="status-week-table">
+            <tbody>
+              <tr class="row-day"><th>요일</th></tr>
+              <tr class="row-rate"><th>달성률</th></tr>
+            </tbody>
+          </table>
+          <p class="status-week-avg" id="status-week-avg"></p>
+        </div>
+
+        <div class="status-list" id="status-list">
+          <!-- JS로 참여자 카드가 채워짐 -->
+        </div>
+      </div>
+
+      <div id="status-memo" hidden>
+        <div class="week-box">
+          <div class="week-box__nav">
+            <button id="memo-status-week-prev" class="week-arrow" aria-label="이전 주">‹</button>
+            <span id="memo-status-week-range" class="week-range">이번 주</span>
+            <button id="memo-status-week-next" class="week-arrow" aria-label="다음 주">›</button>
+          </div>
+          <table class="week-table" id="memo-status-week-table"><tbody></tbody></table>
+          <p class="status-week-avg" id="memo-status-week-avg"></p>
+        </div>
+
+        <div class="status-list" id="memo-status-list">
+          <!-- JS로 참여자 카드가 채워짐 -->
+        </div>
       </div>
     </section>
 
     <!-- ============ 내 필사 ============ -->
     <section class="view" id="view-mypilsa" hidden>
-      <h2 class="view-title">내 필사</h2>
+      <h2 class="view-title">필사</h2>
 
       <div class="week-box" id="week-box">
         <div class="week-box__nav">
@@ -94,10 +118,15 @@
 
       <!-- 장 클릭 시 펼쳐지는 필사 패널 -->
       <div class="pilsa-panel" id="pilsa-panel" hidden>
-        <h3 id="pilsa-panel__title"></h3>
+        <!-- 화면을 내려도 장 제목과 원문이 함께 위쪽에 붙어 있는 영역 -->
+        <div class="pilsa-panel__sticky">
+          <h3 id="pilsa-panel__title"></h3>
 
-        <div class="pilsa-panel__text" id="pilsa-panel__text">
-          <!-- 원문 (읽기 전용, 스크롤) -->
+          <div class="pilsa-panel__textbox">
+            <div class="pilsa-panel__text" id="pilsa-panel__text">
+              <!-- 원문 (읽기 전용, 스크롤) -->
+            </div>
+          </div>
         </div>
 
         <div class="pilsa-panel__typing" id="typing-area">
@@ -106,11 +135,77 @@
           </div>
         </div>
 
-        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가). 절마다 이어서 입력하고, Enter를 누르면 다음 절로 넘어가요. 원문과 다른 단어는 빨간 글씨로 표시돼요.</p>
+        <p class="typing-hint">직접 타이핑만 가능해요 (복사·붙여넣기 불가). 절마다 이어서 입력하고, Enter를 누르면 다음 절로 넘어가요. 원문과 다른 단어는 주황색 글씨로 표시돼요.</p>
 
         <div class="pilsa-panel__actions">
           <button class="btn btn--ghost" id="btn-cancel">닫기</button>
           <button class="btn btn--primary" id="btn-submit">제출하기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 계시록 암기 ============ -->
+    <section class="view" id="view-memo" hidden>
+      <h2 class="view-title">계시록 암기</h2>
+
+      <!-- 1단계: 이번 주 암기 절 + 1~22장 박스 -->
+      <div id="memo-home">
+        <div class="week-box">
+          <div class="week-box__nav">
+            <button id="memo-week-prev" class="week-arrow" aria-label="이전 주">‹</button>
+            <span id="memo-week-range" class="week-range">이번 주</span>
+            <button id="memo-week-next" class="week-arrow" aria-label="다음 주">›</button>
+          </div>
+          <table class="week-table" id="memo-week-table"><tbody></tbody></table>
+          <p class="status-week-avg" id="memo-week-pct"></p>
+        </div>
+
+        <p class="memo-total" id="memo-total"></p>
+        <div class="memo-grid" id="memo-chapter-grid">
+          <!-- JS로 1~22장 박스가 채워짐 -->
+        </div>
+      </div>
+
+      <!-- 2단계: 한 장의 절 목록 (체크박스 + 절) -->
+      <div id="memo-chapter" hidden>
+        <div class="memo-head">
+          <button class="btn btn--ghost" id="btn-memo-back-home">‹ 전체 장</button>
+          <h3 id="memo-chapter-title"></h3>
+          <span class="memo-head__count" id="memo-chapter-count"></span>
+        </div>
+        <p class="form-note">절을 누르면 본문을 보고 테스트할 수 있어요. 다 외웠으면 체크박스를 체크하세요.</p>
+        <div class="memo-verse-list" id="memo-verse-list"></div>
+      </div>
+
+      <!-- 3단계: 한 절 보기 / 가리고 테스트 -->
+      <div id="memo-verse" hidden>
+        <div class="memo-head">
+          <button class="btn btn--ghost" id="btn-memo-back-chapter">‹ 절 목록</button>
+          <h3 id="memo-verse-title"></h3>
+          <!-- 가리기 ↔ 본문 보기는 항상 같은 자리에 — 마우스를 옮기지 않고 번갈아 누를 수 있게 -->
+          <button class="btn btn--primary memo-toggle" id="btn-memo-hide" hidden>가리기</button>
+          <button class="btn btn--ghost memo-toggle" id="btn-memo-show" hidden>본문 보기</button>
+        </div>
+
+        <div class="pilsa-panel">
+          <div class="memo-verse-text" id="memo-verse-text"></div>
+
+          <div id="memo-test" hidden>
+            <p class="form-note">외운 대로 입력한 뒤 확인을 눌러보세요. (Enter로도 확인돼요)</p>
+            <textarea id="memo-test-input" class="typing-textarea" rows="4"
+              spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+          </div>
+
+          <div id="memo-result" hidden></div>
+
+          <div class="pilsa-panel__actions memo-actions">
+            <label class="memo-done">
+              <input type="checkbox" id="memo-verse-check"> 암기 완료
+            </label>
+            <span class="memo-actions__spacer"></span>
+            <button class="btn btn--primary" id="btn-memo-grade" hidden>확인</button>
+            <button class="btn btn--primary" id="btn-memo-retry" hidden>다시하기</button>
+          </div>
         </div>
       </div>
     </section>
@@ -124,6 +219,7 @@
         <button class="tabs__btn" data-admin-tab="members">전체 회원</button>
         <button class="tabs__btn" data-admin-tab="assign">성경 장 배정</button>
         <button class="tabs__btn" data-admin-tab="content">본문 입력</button>
+        <button class="tabs__btn" data-admin-tab="memoplan">암기 배정</button>
       </div>
 
       <div class="admin-panel" id="admin-pending"></div>
@@ -133,13 +229,13 @@
           <input type="date" id="assign-start-date">
         </label>
         <button class="btn btn--primary" id="btn-assign-save">배정 계산하기</button>
-        <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 1장씩 자동 배정됩니다.</p>
+        <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 1장씩 자동 배정됩니다. 2026-10-11부터는 평일(월~금)에만 1장씩(주 5장) 배정되고 토·일은 쉬어요.</p>
         <div id="assign-preview"></div>
 
         <label>미리 열기 마감일
           <input type="date" id="assign-open-until">
         </label>
-        <p class="form-note">이 날짜까지는 미리 입력할 수 있어요. 비워두면 기본값(내일까지)으로 열려요.</p>
+        <p class="form-note">기본으로 이번 주(토요일까지) 분량이 모두 열려 있어요. 그보다 더 뒤까지 미리 열고 싶을 때만 날짜를 정하세요.</p>
       </div>
       <div class="admin-panel" id="admin-content" hidden>
         <div class="content-picker">
@@ -157,6 +253,18 @@
           placeholder="한 줄에 '절번호 내용'을 입력하세요.&#10;예) 1 예수 그리스도의 종 바울은 사도로 부르심을 받아..."></textarea>
         <p class="form-note" id="content-status"></p>
         <button class="btn btn--primary" id="btn-content-save">저장하기</button>
+      </div>
+      <div class="admin-panel" id="admin-memoplan" hidden>
+        <label>암기 시작일
+          <input type="date" id="memoplan-start-date">
+        </label>
+        <label>시작 장
+          <select id="memoplan-start-chapter"></select>
+        </label>
+        <button class="btn btn--primary" id="btn-memoplan-save">배정 계산하기</button>
+        <p class="form-note" id="memoplan-status"></p>
+        <p class="form-note">시작일부터 평일(월~금)마다 시작 장 1절부터 한 절씩(주 5절) 자동 배정됩니다. 22장까지 마치면 1장으로 돌아가 시작 장 앞까지 이어져요.</p>
+        <div id="memoplan-preview"></div>
       </div>
     </section>
 

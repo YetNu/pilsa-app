@@ -4,8 +4,9 @@
 // 각 탭 1행은 항상 헤더로 취급하고 2행부터 데이터를 읽고 쓴다 (헤더 그대로 입력):
 //   Users:       이름 | 비밀번호해시 | 별명 | 상태 | 역할
 //   Submissions: 이름 | dayIndex | 제출시각
-//   Config:      key | value
-//   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문)
+//   Config:      key | value   (start_date, open_until, memo_start_date, memo_start_chapter)
+//   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
+//   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
 
 const { getSheetsClient, SHEET_ID } = require("./_sheets");
 
@@ -20,7 +21,7 @@ const { getSheetsClient, SHEET_ID } = require("./_sheets");
 const SHORT_TTL_MS = 20 * 1000;   // 회원 목록/제출 기록: 자주 바뀌니 짧게
 const CONTENT_TTL_MS = 2 * 60 * 1000; // 필사 원문: 관리자만 가끔 바꾸니 좀 더 길게
 
-const cache = { users: null, submissions: null, chapters: null }; // 각각 { at, data }
+const cache = { users: null, submissions: null, chapters: null, memoChecks: null }; // 각각 { at, data }
 
 function cacheGet(key, ttl){
   const c = cache[key];
@@ -151,10 +152,15 @@ async function getConfig(){
   const find = key => rows.find(r => r[0] === key);
   const startDateRow = find("start_date");
   const openUntilRow = find("open_until");
+  const memoStartRow = find("memo_start_date");
+  const memoChapterRow = find("memo_start_chapter");
   return {
     start_date: startDateRow ? startDateRow[1] : "",
-    // 관리자가 정한, 미리 입력을 허용하는 마지막 날짜. 비어있으면 클라이언트가 기본값(내일까지)을 적용한다
+    // 관리자가 정한, 미리 입력을 허용하는 마지막 날짜. 비어있으면 클라이언트가 기본값(이번 주 토요일까지)을 적용한다
     open_until: openUntilRow ? openUntilRow[1] : "",
+    // 계시록 암기 시작일/시작 장 — 이 날부터 평일마다 시작 장 1절부터 한 절씩 자동 배정된다
+    memo_start_date: memoStartRow ? memoStartRow[1] : "",
+    memo_start_chapter: memoChapterRow ? memoChapterRow[1] : "",
   };
 }
 
@@ -166,6 +172,8 @@ async function setConfig(patch){
   const upserts = [];
   if (patch.start_date !== undefined) upserts.push(["start_date", patch.start_date]);
   if (patch.open_until !== undefined) upserts.push(["open_until", patch.open_until || ""]);
+  if (patch.memo_start_date !== undefined) upserts.push(["memo_start_date", patch.memo_start_date || ""]);
+  if (patch.memo_start_chapter !== undefined) upserts.push(["memo_start_chapter", patch.memo_start_chapter]);
 
   for (const [key, value] of upserts){
     const idx = rows.findIndex(r => r[0] === key);
@@ -224,9 +232,85 @@ async function setChapterVerses(book, chapter, verses){
   cacheClear("chapters");
 }
 
+/* ---------- 계시록 암기 (Memorize) ---------- */
+
+// 암기 기능을 나중에 추가했기 때문에 기존 스프레드시트에는 이 탭이 없다 —
+// 읽을 때 탭이 없으면 빈 것으로 취급하고, 처음 쓸 때 탭과 헤더를 자동으로 만든다.
+const MEMO_SHEETS = {
+  Memorize: ["이름", "장", "절", "완료", "시각"],
+};
+
+function isMissingSheetError(err){
+  return /Unable to parse range/i.test((err && err.message) || "");
+}
+
+async function ensureSheet(sheets, title){
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title } } }] },
+    });
+  } catch (err) {
+    // 동시에 들어온 다른 요청이 방금 먼저 만들었을 수 있다 — 그 경우만 그냥 넘어간다
+    if (!/already exists/i.test((err && err.message) || "")) throw err;
+  }
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID, range: `${title}!A1`, valueInputOption: "RAW",
+    requestBody: { values: [MEMO_SHEETS[title]] },
+  });
+}
+
+async function readMemoRows(sheets, range){
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range });
+    return res.data.values || [];
+  } catch (err) {
+    if (isMissingSheetError(err)) return [];
+    throw err;
+  }
+}
+
+// 체크/해제를 행 수정·삭제가 아니라 기록 추가(append)로만 남기고, 같은 절은 맨 마지막 기록이
+// 현재 상태다 — 여러 사람이 동시에 체크해도 서로의 행 위치를 건드리지 않아 꼬이지 않는다.
+// 반환: { [이름]: ["장:절", ...] } (현재 체크되어 있는 절만)
+async function getMemoChecks(){
+  const cached = cacheGet("memoChecks", SHORT_TTL_MS);
+  if (cached) return cached;
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "Memorize!A2:E");
+  const sets = {};
+  rows.forEach(r => {
+    const name = r[0];
+    if (!name) return;
+    const key = `${Number(r[1])}:${Number(r[2])}`;
+    sets[name] = sets[name] || new Set();
+    if (String(r[3]) === "1") sets[name].add(key); else sets[name].delete(key);
+  });
+  const data = {};
+  Object.keys(sets).forEach(name => { data[name] = [...sets[name]]; });
+  cacheSet("memoChecks", data);
+  return data;
+}
+
+async function setMemoCheck(name, chapter, verse, done){
+  const sheets = await getSheetsClient();
+  const append = () => sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID, range: "Memorize!A2:E", valueInputOption: "RAW",
+    requestBody: { values: [[name, chapter, verse, done ? 1 : 0, new Date().toISOString()]] },
+  });
+  try { await append(); }
+  catch (err) {
+    if (!isMissingSheetError(err)) throw err;
+    await ensureSheet(sheets, "Memorize");
+    await append();
+  }
+  cacheClear("memoChecks");
+}
+
 module.exports = {
   getUsers, addUser, updateUser, removeUser, reorderUsers,
   getSubmissions, addSubmission,
   getConfig, setConfig,
   getChapterVerses, setChapterVerses,
+  getMemoChecks, setMemoCheck,
 };

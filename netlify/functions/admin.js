@@ -3,10 +3,11 @@ const { requireAdmin } = require("./_auth");
 
 // 관리자 전용
 // GET: 전체 회원 목록 + 배정 시작일 조회
-// POST body: { action: "approve" | "reject" | "remove" | "setNickname" | "setStartDate" | "setOpenUntil", ...payload }
+// POST body: { action: "approve" | "reject" | "remove" | "setActive" | "setNickname" | "setStartDate" | "setOpenUntil", ...payload }
+// 회원 상태(Users 시트의 "상태" 칸): pending(승인 대기) → approved(활성) ⇄ inactive(비활성)
 exports.handler = async (event) => {
   try {
-    requireAdmin(event); // role !== 'admin' 이면 403 에러
+    const admin = requireAdmin(event); // role !== 'admin' 이면 403 에러
 
     if (event.httpMethod === "GET"){
       const [users, config] = await Promise.all([store.getUsers(), store.getConfig()]);
@@ -16,7 +17,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, name, nickname, startDate, names, openUntil } = JSON.parse(event.body || "{}");
+    const { action, name, nickname, startDate, names, openUntil, active } = JSON.parse(event.body || "{}");
 
     if (action === "approve"){
       const ok = await store.updateUser(name, { status: "approved", nickname: nickname || "" });
@@ -27,6 +28,15 @@ exports.handler = async (event) => {
     if (action === "reject" || action === "remove"){
       // reject: 승인 대기 중인 회원 삭제 / remove: 이미 승인된 회원 삭제 — 처리는 동일
       const ok = await store.removeUser(name);
+      if (!ok) return json(404, { error: "회원을 찾을 수 없어요." });
+      return json(200, { ok: true });
+    }
+
+    if (action === "setActive"){
+      // 삭제 대신 비활성화 — 회원 정보와 필사/암기 기록은 그대로 두고, 로그인과 현황 표시에서만 뺀다.
+      // 다시 활성화하면 예전 기록 그대로 돌아온다.
+      if (!active && name === admin.name) return json(400, { error: "본인 계정은 비활성화할 수 없어요." });
+      const ok = await store.updateUser(name, { status: active ? "approved" : "inactive" });
       if (!ok) return json(404, { error: "회원을 찾을 수 없어요." });
       return json(200, { ok: true });
     }
@@ -50,7 +60,7 @@ exports.handler = async (event) => {
     }
 
     if (action === "setOpenUntil"){
-      await store.setConfig({ open_until: openUntil || "" }); // 빈 값이면 기본값(내일까지)으로 되돌림
+      await store.setConfig({ open_until: openUntil || "" }); // 빈 값이면 기본값(이번 주까지)으로 되돌림
       return json(200, { ok: true, openUntil: openUntil || "" });
     }
 

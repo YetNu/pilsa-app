@@ -1,23 +1,34 @@
 /* ===========================================================
    토큰
-   컨셉: 오래된 필사 대장(ledger) + 만년필 잉크
+   화이트 톤 — 밝은 바탕 + 흰 카드 + 검정 글자 + 오렌지 강조
+   (--ink/--paper/--gold 같은 이름은 예전 종이·잉크 테마 때 붙인 것 — 지금은 각각
+    글자색/바탕색/강조색이라는 뜻으로만 쓴다)
    =========================================================== */
 :root{
-  --paper:      #EDE6D3;   /* 배경: 바랜 종이 */
-  --card:       #FBF8F0;   /* 카드: 밝은 종이 */
-  --ink:        #22304A;   /* 본문/기본 텍스트: 짙은 잉크색 */
-  --ink-soft:   #55637E;   /* 보조 텍스트 */
-  --rule:       #C9BB93;   /* 괘선(ruled line) */
-  --rule-soft:  #E1D7B8;
-  --gold:       #A9822F;   /* 강조: 빛바랜 금박 */
-  --red-ink:    #8C2F2F;   /* 교정용 붉은 잉크 (오답/경고) */
-  --green-ink:  #3F6B4A;   /* 완료 표시 */
+  --paper:      #F5F5F5;   /* 페이지 바탕 */
+  --card:       #FFFFFF;   /* 카드/패널 */
+  --ink:        #141414;   /* 기본 글자 */
+  --ink-soft:   #6B6B6B;   /* 보조 글자 */
+  --rule:       #D6D6D6;   /* 테두리 */
+  --rule-soft:  #E8E8E8;
+  --gold:       #EA580C;   /* 강조색 (오렌지) */
+  --on-accent:  #FFFFFF;   /* 강조색 위의 글자 */
+  --red-ink:    #D92D20;   /* 오답/경고 */
+  --green-ink:  #17803D;   /* 완료 */
+
+  --primary-bg: #FFFFFF; --primary-fg: #141414; --primary-hover: #EFEFEF; /* 주요 버튼 (다른 버튼과 같은 흰색) */
+  --head-bg:    #141414; --head-fg:    #FFFFFF;                          /* 표의 제목 칸 */
+  --focus:      #EA580C;                                                 /* 키보드 포커스 표시 */
+
+  /* rgba(var(--x-rgb), 투명도) 형태로 옅은 배경/그림자를 만들 때 쓰는 값 */
+  --ink-rgb: 20,20,20; --accent-rgb: 249,115,22; --red-rgb: 217,45,32; --green-rgb: 23,128,61; --shadow-rgb: 0,0,0;
 
   --serif: 'Noto Serif KR', serif;
   --sans:  'IBM Plex Sans KR', sans-serif;
   --mono:  'Nanum Gothic Coding', monospace;
 
-  --radius: 3px;
+  --radius: 14px;      /* 카드·버튼·입력칸 등 전체적으로 둥글둥글하게 */
+  --radius-sm: 10px;   /* 표처럼 카드 안에 들어가는 작은 요소 */
 }
 
 *{ box-sizing:border-box; }
@@ -25,6 +36,9 @@
    [hidden]의 기본 display:none을 덮어쓰지 못하게 함 */
 [hidden]{ display:none !important; }
 html,body{ height:100%; }
+/* 내용이 길어져 스크롤바가 생겼다 없어졌다 할 때 화면이 좌우로 밀리지 않게 자리를 항상 잡아둔다
+   (암기 화면의 가리기 ↔ 본문 보기 버튼이 제자리에 있어야 해서) */
+html{ scrollbar-gutter: stable; }
 body{
   margin:0;
   background:
@@ -41,7 +55,7 @@ body::before{
   position:fixed; inset:0;
   pointer-events:none;
   background-image:
-    repeating-linear-gradient(0deg, rgba(169,130,47,0.035) 0px, rgba(169,130,47,0.035) 1px, transparent 1px, transparent 34px);
+    repeating-linear-gradient(0deg, rgba(var(--ink-rgb),.03) 0px, rgba(var(--ink-rgb),.03) 1px, transparent 1px, transparent 34px);
   z-index:0;
 }
 
@@ -78,8 +92,6 @@ h1,h2,h3{ font-family: var(--serif); color: var(--ink); margin:0 0 .4em; }
 }
 .topbar__btn:hover{ background: var(--ink); color: var(--card); }
 .topbar__left, .topbar__right{ display:flex; align-items:center; gap:8px; }
-.topbar__btn--admin{ background: var(--gold); border-color: var(--gold); color: var(--card); }
-.topbar__btn--admin:hover{ background:#8c6c25; border-color:#8c6c25; }
 .topbar__btn--logout{ border-color: var(--rule); color: var(--ink-soft); }
 .topbar__btn--logout:hover{ background: var(--red-ink); color: var(--card); border-color: var(--red-ink); }
 
@@ -101,10 +113,10 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   border:1px solid var(--ink);
   letter-spacing:.02em;
 }
-.btn--primary{ background: var(--ink); color:var(--card); }
-.btn--primary:hover{ background:#1a2438; }
+.btn--primary{ background: var(--primary-bg); color: var(--primary-fg); font-weight:600; }
+.btn--primary:hover{ background: var(--primary-hover); }
 .btn--ghost{ background:transparent; color:var(--ink); }
-.btn--ghost:hover{ background: rgba(34,48,74,.06); }
+.btn--ghost:hover{ background: rgba(var(--ink-rgb),.07); }
 .link-btn{
   background:none; border:none; color: var(--red-ink);
   text-decoration:underline; cursor:pointer; font-size:.85rem; padding:0; margin-left:8px;
@@ -123,7 +135,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   padding: 36px 32px;
   width: 100%; max-width: 380px;
   text-align:center;
-  box-shadow: 0 6px 24px rgba(34,48,74,.08);
+  box-shadow: 0 6px 24px rgba(var(--shadow-rgb),.08);
 }
 .auth-card__mark{ font-size:1.6rem; color: var(--gold); margin-bottom:.2em; }
 .auth-card__title{ font-size:1.9rem; }
@@ -157,7 +169,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
    =========================================================== */
 .modal-overlay{
   position: fixed; inset:0; z-index: 20;
-  background: rgba(34,48,74,.45);
+  background: rgba(var(--shadow-rgb),.45);
   display:flex; align-items:center; justify-content:center;
   padding: 20px;
 }
@@ -168,7 +180,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   border-radius: var(--radius);
   padding: 32px 28px;
   width: 100%; max-width: 380px;
-  box-shadow: 0 12px 36px rgba(34,48,74,.28);
+  box-shadow: 0 12px 36px rgba(var(--shadow-rgb),.28);
   animation: modal-in .15s ease-out;
 }
 @keyframes modal-in{
@@ -229,7 +241,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .week-range{ font-family: var(--mono); font-size:.85rem; color:var(--ink-soft); min-width:120px; text-align:center; }
 
 .week-warning{
-  background: rgba(140,47,47,.08); border:1px solid var(--red-ink);
+  background: rgba(var(--red-rgb),.08); border:1px solid var(--red-ink);
   color: var(--red-ink); font-size:.82rem; padding:8px 12px; border-radius: var(--radius);
   margin-bottom:12px;
 }
@@ -243,19 +255,35 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   text-align:center;
   font-size:.78rem;
 }
+/* 표도 모서리를 둥글게 — border-collapse:collapse 상태에서는 border-radius가 안 먹어서
+   separate로 바꾸고, 칸 테두리는 오른쪽/아래쪽만 그려 선이 두 겹이 되지 않게 한다 */
+.week-table, .status-card table{
+  border-collapse:separate; border-spacing:0;
+  border:1px solid var(--rule-soft); border-radius: var(--radius-sm); overflow:hidden;
+}
+.week-table th, .week-table td, .status-card th, .status-card td{
+  border:0 solid var(--rule-soft); border-width:0 1px 1px 0;
+}
+.week-table tr > :last-child, .status-card tr > :last-child{ border-right-width:0; }
+.week-table tr:last-child > *, .status-card tr:last-child > *{ border-bottom-width:0; }
+.status-card th{ padding: 8px 4px; font-size:.78rem; }
 .week-table tr th:first-child{
-  background: var(--ink); color: var(--card); font-family:var(--serif); font-weight:600;
+  background: var(--head-bg); color: var(--head-fg); font-family:var(--serif); font-weight:600;
   width: 56px;
 }
+/* 현황의 "필사"/"암기" 줄 (누를 수 없는 안내용). 배정이 없어 "-"만 있는 주에도 두 줄 높이를 유지해서
+   주나 탭을 넘겨도 박스 크기가 변하지 않게 한다 */
+.row-label td{ color: var(--ink); font-weight:500; line-height:1.35; height: calc(2.7em + 17px); } /* 두 줄 + 위아래 여백 */
 .row-rate td{ font-family: var(--mono); color: var(--ink); }
 .status-week-avg{
   text-align:right; font-size:.85rem; color:var(--ink-soft); margin: 10px 2px 0;
+  line-height:1.5rem; min-height:1.5rem; /* 문구가 바뀌어도(달성률 ↔ 안내) 높이는 그대로 */
 }
 .status-week-avg__num{ font-family: var(--mono); font-size:.95rem; color:var(--ink); }
 
 .row-chapter td{ cursor:pointer; color: var(--ink); font-weight:500; line-height:1.35; }
-.row-chapter td:hover{ background: rgba(169,130,47,.12); }
-.row-chapter td.is-locked{ color:var(--ink-soft); cursor:not-allowed; background:repeating-linear-gradient(45deg, transparent 0 6px, rgba(85,99,126,.06) 6px 12px); }
+.row-chapter td:hover{ background: rgba(var(--accent-rgb),.12); }
+.row-chapter td.is-locked{ color:var(--ink-soft); cursor:not-allowed; background:repeating-linear-gradient(45deg, transparent 0 6px, rgba(var(--ink-rgb),.08) 6px 12px); }
 .row-done td.is-done{ color: var(--green-ink); font-weight:700; }
 .row-done td.is-fail{ color: var(--red-ink); font-weight:700; }
 
@@ -266,20 +294,60 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   background: var(--card); border:1px solid var(--rule); border-radius: var(--radius);
   padding: 20px;
 }
-.pilsa-panel__text{
-  font-family: var(--serif);
-  max-height: 220px; overflow-y:auto;
-  border:1px solid var(--rule-soft); border-radius: var(--radius);
-  padding: 14px 16px; margin-bottom: 18px;
-  background: linear-gradient(var(--card), var(--card)),
-    repeating-linear-gradient(0deg, transparent 0 27px, var(--rule-soft) 27px 28px);
-  line-height: 28px;
-  user-select: none; /* 원문 드래그 복사 방지 보조 */
-  /* 모바일에서 키보드가 뜨고 화면이 스크롤돼도 원문이 화면 밖으로 밀려나지 않도록 상단에 고정 */
+/* 모바일에서 키보드가 뜨거나 화면을 아래로 내려도 원문이 화면 밖으로 밀려나지 않도록 상단에 고정.
+   원문만 붙이면 어느 장인지 안 보여 답답해서, 장 제목까지 한 덩어리로 같이 붙인다
+   (카드 색 배경 + 위쪽 여백으로, 아래로 지나가는 입력칸이 제목 뒤로 비치지 않게) */
+.pilsa-panel__sticky{
   position: sticky; top: 0; z-index: 3;
-  box-shadow: 0 4px 10px rgba(34,48,74,.08);
+  background: var(--card);
+  /* 아래쪽에도 카드 색 띠를 둬서, 화면이 스크롤될 때 입력 박스가 원문 박스의 둥근 모서리 밑으로
+     삐져나와 보이지 않고 반듯한 선에서 가려지게 한다 */
+  padding: 12px 0 14px; margin-top: -12px;
 }
-.pilsa-panel__typing{ margin-bottom:6px; }
+.pilsa-panel__sticky h3{ margin-bottom: 10px; }
+/* 마우스로 쓰는 화면(PC)에서는 붙여두지 않는다 — 입력칸이 자기 박스 안에서 따로 스크롤되므로 원문을
+   고정할 필요가 없고, 고정해두면 화면 전체를 내릴 때 입력 박스 윗부분이 원문 밑으로 들어가 잘려 보인다.
+   (터치 기기에서는 키보드가 올라오며 화면이 밀릴 때 원문이 사라지지 않도록 고정을 유지) */
+@media (hover: hover) and (pointer: fine){
+  .pilsa-panel__sticky{ position: static; }
+}
+/* 원문 박스. 테두리·여백은 바깥(.pilsa-panel__textbox)이 맡고, 실제로 스크롤되는 안쪽(.pilsa-panel__text)은
+   위아래 여백 없이 높이가 정확히 8줄(26px × 8)이다. 원문의 모든 절도 줄 높이의 배수라서, 어떤 절을
+   맨 위에 맞추면 맨 아래도 줄과 줄 사이에서 딱 끊긴다 — 위로 앞 절이 찔끔 보이거나 아래로 글자가
+   반쯤 잘려 보이지 않는다. 손으로 스크롤해도 절의 첫 줄에 맞춰 멈춘다(scroll-snap). */
+.pilsa-panel__textbox{
+  border:1px solid var(--rule-soft); border-radius: var(--radius);
+  padding: 12px 0;
+  background: var(--card);
+  box-shadow: 0 4px 10px rgba(var(--shadow-rgb),.08);
+}
+.pilsa-panel__text{
+  max-height: 208px; overflow-y:auto; scrollbar-gutter: stable;
+  padding: 0 12px 0 4px; /* 좌우 여백은 아래 입력 박스(.pilsa-panel__typing)와 같게 */
+  scroll-snap-type: y mandatory;
+  user-select: none; /* 원문 드래그 복사 방지 보조 */
+}
+/* 지금 입력 중인 절 (입력칸을 누르면 원문이 그 절로 스크롤되면서 표시됨) */
+.pilsa-panel__text .is-current .source-row__text{ background: rgba(var(--accent-rgb),.14); }
+/* 원문 한 절 = 입력칸 한 줄과 같은 구조("N절" 칸 + 본문 칸). 본문 칸의 좌우 여백(12px + 테두리 1px)과
+   글자 크기·줄 간격이 입력칸과 같아서, 원문과 입력한 글의 시작 위치와 줄바꿈 위치가 일치한다 */
+.source-row{ display:flex; align-items:flex-start; gap:10px; scroll-snap-align:start; }
+.source-row .verse-input-row__num{ padding-top:0; line-height:26px; }
+.source-row__text{
+  flex:1; min-width:0;
+  font-family: var(--serif); font-size:16px; line-height:26px;
+  padding: 0 12px; border:solid transparent; border-width:0 1px; border-radius: 8px;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
+}
+/* 입력칸들은 원문 박스와 분리된 자기 박스 안에서 따로 스크롤된다 — 화면 전체를 내리지 않아도
+   되고, 절 입력칸이 원문 박스에 걸려 잘려 보이지 않는다. 높이는 제목·원문·안내·버튼을 뺀
+   나머지 화면에 맞춘다 (너무 작아지지 않게 최소 220px) */
+.pilsa-panel__typing{
+  border:1px solid var(--rule-soft); border-radius: var(--radius);
+  padding: 14px 12px 14px 4px; margin-bottom:6px;
+  max-height: max(220px, calc(100vh - 470px)); max-height: max(220px, calc(100dvh - 470px));
+  overflow-y:auto; scrollbar-gutter: stable;
+}
 
 /* 절마다 하나씩 있는 입력칸. 실제 입력은 투명한 textarea가 받고(IME 조합을 그대로
    브라우저에 맡기기 위해 절대 내용을 직접 조작하지 않음), 그 밑에 정확히 같은 크기로
@@ -296,11 +364,13 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   background: var(--card);
   border:1px solid var(--rule-soft); border-radius: var(--radius);
 }
-.verse-input-row__box:focus-within{ border-color: var(--ink); }
+/* 입력 중인 칸은 둥근 테두리 자체가 주황색으로 바뀐다 (네모난 포커스 외곽선은 따로 그리지 않음) */
+.verse-input-row__box:focus-within{ border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.verse-input-row__textarea:focus-visible, .typing-textarea:focus-visible{ outline:none; }
 .verse-input-row__overlay,
 .verse-input-row__textarea{
   box-sizing:border-box; width:100%;
-  font-family: var(--serif); font-size:16px; line-height:1.6;
+  font-family: var(--serif); font-size:16px; line-height:26px; /* 원문(.source-row__text)과 같은 줄 높이 */
   padding: 9px 12px;
   white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
 }
@@ -308,7 +378,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   position:absolute; top:0; left:0; z-index:2;
   color: var(--ink); pointer-events:none; user-select:none;
 }
-.verse-input-row__overlay .is-wrong{ color: var(--red-ink); font-weight:600; }
+.verse-input-row__overlay .is-wrong{ color: var(--gold); font-weight:600; } /* 오타는 주황색 */
 .verse-input-row__textarea{
   position:relative; z-index:1; display:block; resize:none; overflow:hidden;
   background: transparent; color: transparent; caret-color: var(--ink);
@@ -325,11 +395,82 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   line-height: 28px;
   outline:none;
 }
-.typing-textarea:focus{ border-color: var(--ink); }
+.typing-textarea:focus{ border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
 .typing-textarea::placeholder{ color: var(--ink-soft); font-family: var(--sans); }
 
 .typing-hint{ color: var(--ink-soft); font-size:.78rem; margin: 4px 0 0; }
 .pilsa-panel__actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+
+/* ===========================================================
+   계시록 암기
+   =========================================================== */
+.status-card__pct--memo{ width:auto; text-align:right; }
+
+.memo-total{ font-size:.85rem; color:var(--ink-soft); margin: 0 2px 12px; }
+.memo-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap:10px; }
+.memo-chapter-box{
+  display:flex; flex-direction:column; align-items:flex-start; gap:4px;
+  background: var(--card); border:1px solid var(--rule); border-radius: var(--radius);
+  padding: 12px 12px 10px; cursor:pointer; color: var(--ink); text-align:left;
+  transition: border-color .15s, background .15s;
+}
+.memo-chapter-box:hover{ border-color: var(--ink); background: rgba(var(--accent-rgb),.08); }
+.memo-chapter-box__num{ font-family: var(--serif); font-weight:600; font-size:1.05rem; }
+.memo-chapter-box__count{ font-family: var(--mono); font-size:.75rem; color: var(--ink-soft); }
+.memo-chapter-box__bar{
+  display:block; width:100%; height:4px; margin-top:4px;
+  background: var(--rule-soft); border-radius:999px; overflow:hidden;
+}
+.memo-chapter-box__bar i{ display:block; height:100%; background: var(--gold); }
+.memo-chapter-box.is-complete{ border-color: var(--green-ink); }
+.memo-chapter-box.is-complete .memo-chapter-box__bar i{ background: var(--green-ink); }
+
+.memo-head{ display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+.memo-head h3{ margin:0; font-size:1.1rem; }
+.memo-toggle{ margin-left:auto; min-width:104px; }
+.memo-head__count{ margin-left:auto; font-family: var(--mono); font-size:.85rem; color: var(--ink-soft); }
+
+.memo-verse-list{ display:grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap:8px; margin-top:12px; }
+.memo-verse-item{
+  display:flex; align-items:stretch;
+  background: var(--card); border:1px solid var(--rule); border-radius: var(--radius);
+}
+.memo-verse-item input[type="checkbox"]{
+  flex-shrink:0; width:20px; height:20px; margin: 11px 4px 11px 12px;
+  accent-color: var(--green-ink); cursor:pointer;
+}
+.memo-verse-item__btn{
+  flex:1; display:flex; align-items:center; gap:6px;
+  background:none; border:none; padding: 8px 10px 8px 6px;
+  font-family: var(--serif); font-size:.95rem; color: var(--ink); cursor:pointer; text-align:left;
+}
+.memo-verse-item.is-done{ border-color: var(--green-ink); background: rgba(var(--green-rgb),.1); }
+.memo-verse-item.is-done .memo-verse-item__btn{ color: var(--green-ink); }
+/* 마우스를 올리면 절 글자 쪽만이 아니라 체크박스 주변까지 칸 전체가 주황빛으로 */
+.memo-verse-item:hover{ background: rgba(var(--accent-rgb),.12); }
+.memo-badge{
+  font-family: var(--sans); font-size:.65rem; color: var(--on-accent); background: var(--gold);
+  border-radius: 999px; padding: 1px 7px; white-space:nowrap;
+}
+
+.memo-verse-text, .memo-result__text{
+  font-family: var(--serif); font-size:1.05rem; line-height:1.9;
+  border:1px solid var(--rule-soft); border-radius: var(--radius);
+  padding: 14px 16px; word-break: keep-all; overflow-wrap: break-word;
+}
+.memo-verse-text{ user-select:none; -webkit-user-select:none; }
+.memo-result__verdict{ font-weight:600; margin: 0 0 12px; }
+.memo-result__verdict.is-correct{ color: var(--green-ink); }
+.memo-result__verdict.is-wrong{ color: var(--red-ink); }
+.memo-result__label{ font-size:.8rem; color: var(--ink-soft); margin: 12px 0 5px; }
+.memo-result__label small{ font-size:.72rem; }
+.memo-result__text{ white-space: pre-wrap; }
+.memo-result__text .is-wrong{ color: var(--red-ink); font-weight:700; background: rgba(var(--red-rgb),.14); }
+
+.memo-actions{ align-items:center; flex-wrap:wrap; }
+.memo-actions__spacer{ flex:1; }
+.memo-done{ display:flex; align-items:center; gap:7px; font-size:.9rem; cursor:pointer; }
+.memo-done input{ width:20px; height:20px; accent-color: var(--green-ink); cursor:pointer; }
 
 /* ===========================================================
    관리자
@@ -344,6 +485,10 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   padding:4px; font-size:16px; width:110px;
 }
 .admin-row__name{ flex:1; }
+.admin-row.is-inactive .admin-row__name, .admin-row.is-inactive input{ color: var(--ink-soft); }
+.admin-row__state{
+  font-size:.7rem; color: var(--ink-soft); border:1px solid var(--rule); border-radius:999px; padding:1px 7px; margin-left:4px;
+}
 .drag-handle{
   cursor: grab; color: var(--ink-soft); font-size:1.2rem; line-height:1; flex-shrink:0;
   padding: 8px 6px; margin: -8px -6px; /* 손가락으로 누르기 쉽게 실제 터치 영역을 넓힘 */
@@ -373,11 +518,20 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
    =========================================================== */
 @media (max-width:480px){
   .week-table th, .week-table td{ font-size:.68rem; padding:6px 2px; }
+  /* 좁은 화면에서는 긴 책 이름(데살로니가전서 등)이 칸 안에서 네 줄까지 접히므로 그 높이로 고정 */
+  .row-label td{ height: calc(5.4em + 13px); }
   main{ padding: 20px 12px 70px; }
+  /* 상단 버튼이 늘어나서(계시록 암기) 좁은 화면에서는 버튼을 촘촘하게 */
+  .topbar{ padding: 10px 10px; gap:6px; flex-wrap:wrap; } /* 아주 좁은 폰에서는 두 줄로 */
+  /* 이름은 맨 윗줄 가운데에 따로 한 줄로 */
+  .topbar__title{ order:-1; width:100%; text-align:center; font-size:1rem; }
+  .topbar__left, .topbar__right{ gap:5px; }
+  .topbar__btn{ padding: 7px 8px; font-size:.78rem; white-space:nowrap; }
+  .tabs__btn{ font-size:.8rem; }
 }
 
 /* 접근성: 포커스 표시 유지 */
-:focus-visible{ outline: 2px solid var(--gold); outline-offset:2px; }
+:focus-visible{ outline: 2px solid var(--focus); outline-offset:2px; }
 
 /* 모션 최소화 선호 사용자 대응 */
 @media (prefers-reduced-motion: reduce){
