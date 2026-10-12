@@ -523,7 +523,7 @@ function isPhoneLayout(){ return window.matchMedia(PHONE_LAYOUT_QUERY).matches; 
 // 또 한 번 움직여서 브라우저 자체 스크롤·키보드 애니메이션과 겹쳐 꿀렁거렸다)
 let revealTimer = null;
 let lastVerseBlurAt = 0; // 방금 다른 절 입력칸에 있었는지(= 키보드가 이미 올라와 있는지) 판단용
-function revealTypingRow(row){
+function revealTypingRow(row, immediately){
   if (!isPhoneLayout()) return;
   const TOP_MARGIN = 72; // 인앱 브라우저가 화면 위에 띄우는 주소창 등에 가리지 않을 만큼의 여유
   const move = () => {
@@ -544,7 +544,25 @@ function revealTypingRow(row){
   };
   clearTimeout(revealTimer);
   const keyboardAlreadyUp = Date.now() - lastVerseBlurAt < 200; // Enter 등으로 절에서 절로 바로 넘어온 경우
-  revealTimer = setTimeout(move, keyboardAlreadyUp ? 0 : 450);
+  revealTimer = setTimeout(move, immediately || keyboardAlreadyUp ? 0 : 450);
+}
+
+// PC 배치: 입력칸들은 자기 박스(#typing-area) 안에서 따로 스크롤된다. Enter로 다음 절로 넘어가거나
+// 글이 길어져 입력칸이 아래로 커질 때, 지금 쓰는 칸이 박스 아래(또는 위)로 잘려 보이지 않도록
+// 박스 안 스크롤을 필요한 만큼만 옮긴다
+function keepTypingRowInBox(row, smooth){
+  if (isPhoneLayout()) return;
+  const container = document.getElementById("typing-area");
+  const box = row.querySelector(".verse-input-row__box");
+  const MARGIN = 10; // 칸 테두리가 박스 가장자리에 딱 붙지 않게
+  const c = container.getBoundingClientRect();
+  const r = box.getBoundingClientRect();
+  let delta = 0;
+  if (r.bottom > c.bottom - MARGIN) delta = r.bottom - (c.bottom - MARGIN);
+  // 칸이 박스보다 클 정도로 길면 아래쪽(지금 쓰고 있는 줄)을 우선하고, 아니면 위가 잘리지 않게
+  if (r.top - delta < c.top + MARGIN && r.height + MARGIN * 2 <= c.height) delta = r.top - (c.top + MARGIN);
+  if (Math.abs(delta) < 1) return;
+  container.scrollBy({ top: delta, behavior: smooth ? "smooth" : "auto" });
 }
 
 // 복사·붙여넣기 금지 — 절 입력칸이 장을 열 때마다 새로 만들어지므로 만들어질 때마다 걸어준다.
@@ -641,12 +659,16 @@ function buildTypingArea(){
     textarea.addEventListener("input", () => {
       renderVerseOverlay(overlay, textarea.value, v.text);
       autoResizeVerseInput(textarea, overlay);
+      // 줄이 늘어나 칸이 커졌으면 잘리지 않게 따라간다 (폰: 화면 / PC: 입력 박스 안 스크롤)
+      revealTypingRow(row, true);
+      keepTypingRowInBox(row, false);
       saveDraftVerse(openAssignment.dayIndex, v.verse, textarea.value);
     });
 
     textarea.addEventListener("focus", () => {
       showSourceVerse(i);
       revealTypingRow(row);
+      keepTypingRowInBox(row, true);
     });
 
     // 칸을 벗어날 때(Enter로 다음 절 이동, 다른 곳 클릭, 제출 버튼 클릭 등)는 스페이스 없이
