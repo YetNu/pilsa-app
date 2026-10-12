@@ -416,6 +416,7 @@ async function openPilsaPanel(dayIndex, done){
   document.getElementById("pilsa-panel__title").textContent = formatAssignmentLabel(pair);
   document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-note">불러오는 중…</p>`;
   document.getElementById("typing-area").hidden = true;
+  document.getElementById("pilsa-panel").classList.remove("is-typing");
   document.getElementById("typing-area-list").innerHTML = "";
   document.querySelector(".typing-hint").hidden = openAssignment.done;
   document.getElementById("btn-submit").hidden = openAssignment.done;
@@ -454,6 +455,7 @@ async function openPilsaPanel(dayIndex, done){
   openAssignment.verses = verses;
   if (!openAssignment.done){
     document.getElementById("typing-area").hidden = false;
+    document.getElementById("pilsa-panel").classList.add("is-typing"); // 폰에서는 이때 원문 박스를 숨기고 절마다 원문을 입력칸 위에 보여준다
     document.getElementById("btn-submit").disabled = false;
     buildTypingArea();
   }
@@ -505,6 +507,32 @@ function showSourceVerse(index){
   // 이렇게 맞추면 칸 맨 아래도 줄 경계에서 끊겨, 위아래 어디에도 반쯤 잘린 글자가 보이지 않는다
   const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
   box.scrollTo({ top, behavior: "smooth" });
+}
+
+// 폰/태블릿 배치인지 (style.css의 같은 조건과 짝) — 이 배치에서는 위쪽 원문 박스 대신
+// 절마다 "원문 → 바로 아래 입력칸"으로 붙여서 보여준다
+const PHONE_LAYOUT_QUERY = "(max-width: 600px), (hover: none) and (pointer: coarse)";
+function isPhoneLayout(){ return window.matchMedia(PHONE_LAYOUT_QUERY).matches; }
+
+// 폰에서 입력칸을 누르면, 그 절의 원문과 입력칸이 키보드 위 남은 화면에 함께 들어오도록 화면을 옮긴다.
+// 브라우저가 알아서 해주는 스크롤은 입력칸만 겨우 보이게 맞추는 데다, iOS는 키보드가 올라와도
+// 페이지 높이가 그대로라서 실제로 보이는 영역(visualViewport) 기준으로 직접 계산해야 한다
+function revealTypingRow(row){
+  if (!isPhoneLayout()) return;
+  const TOP_MARGIN = 72; // 인앱 브라우저가 화면 위에 띄우는 주소창 등에 가리지 않을 만큼의 여유
+  const move = () => {
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0;
+    const viewHeight = vv ? vv.height : window.innerHeight;
+    const rect = row.getBoundingClientRect();
+    let delta = rect.top - viewTop - TOP_MARGIN;
+    // 절이 길어서 원문+입력칸이 한 화면에 다 안 들어가면 입력칸 아래쪽이 보이는 쪽을 우선한다
+    const hiddenBelow = (rect.bottom - delta) - (viewTop + viewHeight - 10);
+    if (hiddenBelow > 0) delta += hiddenBelow;
+    window.scrollBy({ top: delta, behavior: "smooth" });
+  };
+  move();
+  setTimeout(move, 400); // 키보드가 다 올라와 보이는 영역이 줄어든 뒤에 한 번 더 맞춘다
 }
 
 // 복사·붙여넣기 금지 — 절 입력칸이 장을 열 때마다 새로 만들어지므로 만들어질 때마다 걸어준다.
@@ -581,10 +609,13 @@ function buildTypingArea(){
     row.className = "verse-input-row";
     row.innerHTML = `
       <span class="verse-input-row__num">${v.verse}절</span>
-      <div class="verse-input-row__box">
-        <div class="verse-input-row__overlay" aria-hidden="true"></div>
-        <textarea class="verse-input-row__textarea" rows="1" data-verse="${v.verse}"
-          spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+      <div class="verse-input-row__main">
+        <div class="verse-input-row__source">${v.text}</div>
+        <div class="verse-input-row__box">
+          <div class="verse-input-row__overlay" aria-hidden="true"></div>
+          <textarea class="verse-input-row__textarea" rows="1" data-verse="${v.verse}"
+            spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+        </div>
       </div>`;
     container.appendChild(row);
 
@@ -601,7 +632,10 @@ function buildTypingArea(){
       saveDraftVerse(openAssignment.dayIndex, v.verse, textarea.value);
     });
 
-    textarea.addEventListener("focus", () => showSourceVerse(i));
+    textarea.addEventListener("focus", () => {
+      showSourceVerse(i);
+      revealTypingRow(row);
+    });
 
     // 칸을 벗어날 때(Enter로 다음 절 이동, 다른 곳 클릭, 제출 버튼 클릭 등)는 스페이스 없이
     // 끝난 마지막 단어도 확정해서 검사한다
