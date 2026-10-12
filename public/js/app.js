@@ -516,7 +516,13 @@ function isPhoneLayout(){ return window.matchMedia(PHONE_LAYOUT_QUERY).matches; 
 
 // 폰에서 입력칸을 누르면, 그 절의 원문과 입력칸이 키보드 위 남은 화면에 함께 들어오도록 화면을 옮긴다.
 // 브라우저가 알아서 해주는 스크롤은 입력칸만 겨우 보이게 맞추는 데다, iOS는 키보드가 올라와도
-// 페이지 높이가 그대로라서 실제로 보이는 영역(visualViewport) 기준으로 직접 계산해야 한다
+// 페이지 높이가 그대로라서 실제로 보이는 영역(visualViewport) 기준으로 직접 계산해야 한다.
+//
+// 화면이 여러 번 출렁이지 않도록: 키보드가 올라오는 중에는 건드리지 않고 다 올라온 뒤 딱 한 번만,
+// 그것도 원문이나 입력칸이 실제로 가려져 있을 때만 움직인다 (예전에는 누르자마자 한 번, 조금 뒤
+// 또 한 번 움직여서 브라우저 자체 스크롤·키보드 애니메이션과 겹쳐 꿀렁거렸다)
+let revealTimer = null;
+let lastVerseBlurAt = 0; // 방금 다른 절 입력칸에 있었는지(= 키보드가 이미 올라와 있는지) 판단용
 function revealTypingRow(row){
   if (!isPhoneLayout()) return;
   const TOP_MARGIN = 72; // 인앱 브라우저가 화면 위에 띄우는 주소창 등에 가리지 않을 만큼의 여유
@@ -524,15 +530,21 @@ function revealTypingRow(row){
     const vv = window.visualViewport;
     const viewTop = vv ? vv.offsetTop : 0;
     const viewHeight = vv ? vv.height : window.innerHeight;
+    const topLimit = viewTop + TOP_MARGIN;
+    const bottomLimit = viewTop + viewHeight - 10;
     const rect = row.getBoundingClientRect();
-    let delta = rect.top - viewTop - TOP_MARGIN;
+    if (rect.top >= topLimit - 4 && rect.bottom <= bottomLimit) return; // 이미 다 보이면 그대로 둔다
+
+    let delta = rect.top - topLimit;
     // 절이 길어서 원문+입력칸이 한 화면에 다 안 들어가면 입력칸 아래쪽이 보이는 쪽을 우선한다
-    const hiddenBelow = (rect.bottom - delta) - (viewTop + viewHeight - 10);
+    const hiddenBelow = (rect.bottom - delta) - bottomLimit;
     if (hiddenBelow > 0) delta += hiddenBelow;
+    if (Math.abs(delta) < 6) return;
     window.scrollBy({ top: delta, behavior: "smooth" });
   };
-  move();
-  setTimeout(move, 400); // 키보드가 다 올라와 보이는 영역이 줄어든 뒤에 한 번 더 맞춘다
+  clearTimeout(revealTimer);
+  const keyboardAlreadyUp = Date.now() - lastVerseBlurAt < 200; // Enter 등으로 절에서 절로 바로 넘어온 경우
+  revealTimer = setTimeout(move, keyboardAlreadyUp ? 0 : 450);
 }
 
 // 복사·붙여넣기 금지 — 절 입력칸이 장을 열 때마다 새로 만들어지므로 만들어질 때마다 걸어준다.
@@ -640,6 +652,7 @@ function buildTypingArea(){
     // 칸을 벗어날 때(Enter로 다음 절 이동, 다른 곳 클릭, 제출 버튼 클릭 등)는 스페이스 없이
     // 끝난 마지막 단어도 확정해서 검사한다
     textarea.addEventListener("blur", () => {
+      lastVerseBlurAt = Date.now();
       renderVerseOverlay(overlay, textarea.value, v.text, true);
     });
 
