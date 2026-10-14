@@ -55,6 +55,9 @@ function showView(id){
   const me = getCurrentUser();
   document.getElementById("btn-admin").hidden = !(me && me.role === "admin");
   document.getElementById("topbar-name").textContent = me ? me.name : "";
+  // 상단 메뉴에서 지금 보고 있는 화면 표시
+  const menuFor = { "view-status": "btn-status", "view-mypilsa": "btn-mypilsa", "view-memo": "btn-memo", "view-admin": "btn-admin" };
+  document.querySelectorAll(".topbar__btn").forEach(b => b.classList.toggle("is-active", b.id === menuFor[id]));
   if (id === "view-status") renderStatusTab();
   if (id === "view-mypilsa"){ weekOffset = weekOffset || 0; renderWeek(); }
   if (id === "view-memo") renderMemo();
@@ -773,7 +776,7 @@ function memoMarkCell(slot, checks, date, today){
 }
 
 function showMemoSection(name){
-  ["home", "chapter", "verse"].forEach(s => document.getElementById(`memo-${s}`).hidden = s !== name);
+  ["home", "chapter", "verse", "range"].forEach(s => document.getElementById(`memo-${s}`).hidden = s !== name);
 }
 
 async function renderMemo(){
@@ -803,15 +806,41 @@ function renderMemoHome(){
     const chapter = i + 1;
     const done = doneByChapter[chapter] || 0;
     const pct = Math.round((done / count) * 100);
+    // 박스 전체는 그 장의 절 목록으로 들어가는 버튼, 오른쪽 위 책 아이콘은 그 장 전체 본문을 바로 띄우는 버튼
+    // (버튼 안에 버튼을 넣을 수 없어서 두 버튼을 나란히 겹쳐 놓는다)
     return `
-      <button type="button" class="memo-chapter-box${done === count ? " is-complete" : ""}" data-chapter="${chapter}">
-        <span class="memo-chapter-box__num">${chapter}장</span>
-        <span class="memo-chapter-box__count">${done} / ${count}절</span>
-        <span class="memo-chapter-box__bar"><i style="width:${pct}%"></i></span>
-      </button>`;
-  }).join("");
-  grid.querySelectorAll("[data-chapter]").forEach(box =>
-    box.addEventListener("click", () => openMemoChapter(Number(box.dataset.chapter))));
+      <div class="memo-chapter-box${done === count ? " is-complete" : ""}">
+        <button type="button" class="memo-chapter-box__main" data-chapter="${chapter}">
+          <span class="memo-chapter-box__num">${chapter}장</span>
+          <span class="memo-chapter-box__count">${done} / ${count}절</span>
+          <span class="memo-chapter-box__bar"><i style="width:${pct}%"></i></span>
+        </button>
+        <button type="button" class="memo-chapter-box__text" data-chapter-text="${chapter}" title="${chapter}장 본문 보기" aria-label="${chapter}장 본문 보기">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 5.5C4.5 4 8 4 12 6c4-2 7.5-2 10-.5v14c-2.5-1.5-6-1.5-10 .5-4-2-7.5-2-10-.5z"/>
+            <path d="M12 6v14"/>
+          </svg>
+        </button>
+      </div>`;
+  }).join("") +
+    // 22장 다음 칸 = 암기 테스트 (장 박스와 같은 크기)
+    `<button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-range" title="암기 테스트">
+      <svg class="memo-test-box__icon" viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="6" width="24" height="32" rx="3" fill="var(--card)"/>
+        <path d="M14 14h11M14 20h8M14 26h10"/>
+        <path class="memo-test-box__check" d="M15.5 32l2.5 2.5 5-5"/>
+        <g class="memo-test-box__pencil">
+          <path d="M36 12l5 5-14 14-6 1 1-6z" fill="var(--card)"/>
+          <path d="M33 15l5 5"/>
+        </g>
+      </svg>
+      <span class="memo-test-box__label">암기 테스트</span>
+    </button>`;
+  document.getElementById("btn-memo-range").addEventListener("click", openMemoRange);
+  grid.querySelectorAll("[data-chapter]").forEach(btn =>
+    btn.addEventListener("click", () => openMemoChapter(Number(btn.dataset.chapter))));
+  grid.querySelectorAll("[data-chapter-text]").forEach(btn =>
+    btn.addEventListener("click", () => openChapterTextModal(Number(btn.dataset.chapterText))));
 }
 
 function renderMemoWeekBox(){
@@ -849,6 +878,167 @@ function renderMemoWeekBox(){
 document.getElementById("memo-week-prev").addEventListener("click", () => { memoWeekOffset--; renderMemoWeekBox(); });
 document.getElementById("memo-week-next").addEventListener("click", () => { memoWeekOffset++; renderMemoWeekBox(); });
 
+/* ---------- 암기 테스트 (장·절 범위를 골라 필사하듯 절마다 입력) ---------- */
+let memoRange = null; // 지금 테스트 중인 범위 { chapter, verses: [{ verse, text }] }
+
+(function initMemoRangePicker(){
+  const chapterSel = document.getElementById("memo-range-chapter");
+  // 기본 선택은 "0장 0 ~ 0절"(아무것도 안 고른 상태) — 0은 고르기 전 자리표시용
+  chapterSel.innerHTML = `<option value="0">0</option>` +
+    REVELATION.verses.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
+  chapterSel.addEventListener("change", () => fillMemoRangeVerses(0, 0));
+  // 시작 절을 끝 절보다 뒤로 고르면(끝 절이 아직 0이어도) 끝 절을 따라 옮긴다 (반대도 마찬가지)
+  document.getElementById("memo-range-from").addEventListener("change", e => {
+    const to = document.getElementById("memo-range-to");
+    if (Number(e.target.value) > Number(to.value)) to.value = e.target.value;
+  });
+  document.getElementById("memo-range-to").addEventListener("change", e => {
+    const from = document.getElementById("memo-range-from");
+    const v = Number(e.target.value);
+    if (v && (Number(from.value) === 0 || Number(from.value) > v)) from.value = e.target.value;
+  });
+})();
+
+function fillMemoRangeVerses(from, to){
+  const chapter = Number(document.getElementById("memo-range-chapter").value);
+  const count = chapter ? REVELATION.verses[chapter - 1] : 0;
+  const options = `<option value="0">0</option>` +
+    Array.from({ length: count }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
+  const fromSel = document.getElementById("memo-range-from"), toSel = document.getElementById("memo-range-to");
+  fromSel.innerHTML = options; toSel.innerHTML = options;
+  fromSel.value = from; toSel.value = to;
+}
+
+function openMemoRange(){
+  document.getElementById("memo-range-chapter").value = "0";
+  fillMemoRangeVerses(0, 0);
+  document.getElementById("memo-range-panel").hidden = true;
+  memoRange = null;
+  showMemoSection("range");
+}
+
+async function startMemoRange(){
+  const chapter = Number(document.getElementById("memo-range-chapter").value);
+  const from = Number(document.getElementById("memo-range-from").value);
+  const to = Number(document.getElementById("memo-range-to").value);
+  if (!chapter || !from || !to){ showAlertModal("장과 절을 선택해주세요."); return; }
+  const panel = document.getElementById("memo-range-panel");
+  const list = document.getElementById("memo-range-list");
+  const btn = document.getElementById("btn-memo-range-start");
+
+  document.getElementById("memo-range-title").textContent = `${REVELATION.book} ${chapter}장 ${from}~${to}절`;
+  document.getElementById("memo-range-summary").hidden = true;
+  list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  panel.hidden = false;
+  btn.disabled = true;
+
+  let texts;
+  try { texts = await getRevelationChapterText(chapter); }
+  catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; btn.disabled = false; return; }
+  finally { btn.disabled = false; }
+
+  const verses = [];
+  for (let v = from; v <= to; v++){
+    const found = texts.find(t => t.verse === v);
+    verses.push({ verse: v, text: found ? found.text : null });
+  }
+  memoRange = { chapter, verses };
+  buildMemoRangeRows();
+}
+
+// 필사 입력칸과 같은 모양("N절" + 입력칸)으로 절마다 한 줄씩. 채점 결과는 각 입력칸 바로 아래에 붙는다
+function buildMemoRangeRows(){
+  const list = document.getElementById("memo-range-list");
+  list.innerHTML = "";
+  const textareas = [];
+
+  memoRange.verses.forEach((v, i) => {
+    const row = document.createElement("div");
+    row.className = "verse-input-row";
+    row.innerHTML = `
+      <span class="verse-input-row__num">${v.verse}절</span>
+      <div class="verse-input-row__main">
+        <div class="verse-input-row__box memo-range__box">
+          <textarea class="verse-input-row__textarea memo-range__input" rows="1" data-idx="${i}"
+            spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"
+            ${v.text === null ? "disabled placeholder=\"아직 본문이 등록되지 않은 절이에요\"" : ""}></textarea>
+        </div>
+        <div class="memo-range__result" hidden></div>
+      </div>`;
+    list.appendChild(row);
+
+    const textarea = row.querySelector("textarea");
+    const resize = () => { textarea.style.height = "auto"; textarea.style.height = textarea.scrollHeight + "px"; };
+    resize();
+    preventPasteOn(textarea);
+    textarea.addEventListener("input", () => { resize(); revealTypingRow(row, true); });
+    textarea.addEventListener("blur", () => { lastVerseBlurAt = Date.now(); });
+    textarea.addEventListener("focus", () => revealTypingRow(row));
+    textarea.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const next = textareas.slice(i + 1).find(t => !t.disabled);
+      if (next) next.focus(); else textarea.blur();
+    });
+    textareas.push(textarea);
+  });
+
+  const first = textareas.find(t => !t.disabled);
+  if (first) first.focus();
+}
+
+function gradeMemoRange(){
+  if (!memoRange) return;
+  const rows = [...document.querySelectorAll("#memo-range-list .verse-input-row")];
+  const counts = { ok: 0, space: 0, wrong: 0, skipped: 0 };
+
+  memoRange.verses.forEach((v, i) => {
+    const row = rows[i];
+    const input = row.querySelector("textarea");
+    const resultEl = row.querySelector(".memo-range__result");
+    row.classList.remove("is-ok", "is-space", "is-wrong");
+    if (v.text === null){ counts.skipped++; resultEl.hidden = true; return; }
+
+    if (!normalizeVerseText(input.value)){
+      counts.wrong++;
+      row.classList.add("is-wrong");
+      resultEl.innerHTML = `<p class="memo-result__verdict is-wrong">❌ 입력하지 않았어요</p>
+        <div class="memo-result__label">정답</div><div class="memo-result__text">${escapeHtml(normalizeVerseText(v.text))}</div>`;
+      resultEl.hidden = false;
+      return;
+    }
+
+    const g = gradeMemoAnswer(input.value, v.text);
+    counts[g.status]++;
+    row.classList.add(`is-${g.status}`);
+    resultEl.innerHTML =
+      g.status === "ok" ? `<p class="memo-result__verdict is-correct">⭕ 정확해요</p>`
+      : g.status === "space" ? `<p class="memo-result__verdict is-correct">⭕ 통과 — 띄어쓰기만 원문과 달라요 (주황색)</p>
+          <div class="memo-result__label">내가 쓴 답</div><div class="memo-result__text">${g.typedHTML}</div>
+          <div class="memo-result__label">정답</div><div class="memo-result__text">${g.sourceHTML}</div>`
+      : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요 (빨강 = 글자, 주황 = 띄어쓰기)</p>
+          <div class="memo-result__label">내가 쓴 답</div><div class="memo-result__text">${g.typedHTML}</div>
+          <div class="memo-result__label">정답</div><div class="memo-result__text">${g.sourceHTML}</div>`;
+    resultEl.hidden = false;
+  });
+
+  const graded = counts.ok + counts.space + counts.wrong;
+  const summary = document.getElementById("memo-range-summary");
+  summary.innerHTML = `${graded}개 절 중 <b>⭕ ${counts.ok + counts.space}개 통과</b> · <b>❌ ${counts.wrong}개</b>${counts.skipped ? ` · 본문 미등록 ${counts.skipped}개` : ""}`;
+  summary.hidden = false;
+}
+
+function resetMemoRange(){
+  if (!memoRange) return;
+  document.getElementById("memo-range-summary").hidden = true;
+  buildMemoRangeRows();
+}
+
+document.getElementById("btn-memo-range-back").addEventListener("click", renderMemoHome);
+document.getElementById("btn-memo-range-start").addEventListener("click", startMemoRange);
+document.getElementById("btn-memo-range-grade").addEventListener("click", gradeMemoRange);
+document.getElementById("btn-memo-range-reset").addEventListener("click", resetMemoRange);
+
 /* ---------- 2단계: 한 장의 절 목록 ---------- */
 function openMemoChapter(chapter){
   memoChapterNum = chapter;
@@ -856,6 +1046,43 @@ function openMemoChapter(chapter){
   renderMemoChapter();
   showMemoSection("chapter");
 }
+
+// 장 전체 본문 창 — 필사 원문과 같은 모양("N절" + 본문)으로 한 장을 통째로 보여준다
+let chapterTextOpenFor = null; // 불러오는 사이에 창을 닫거나 다른 장을 열었는지 확인용
+async function openChapterTextModal(chapter){
+  const modal = document.getElementById("chapter-text-modal");
+  const body = document.getElementById("chapter-text-body");
+  chapterTextOpenFor = chapter;
+  document.getElementById("chapter-text-title").textContent = `${REVELATION.book} ${chapter}장`;
+  body.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  modal.hidden = false;
+  body.scrollTop = 0;
+
+  let texts;
+  try { texts = await getRevelationChapterText(chapter); }
+  catch (err){ if (chapterTextOpenFor === chapter) body.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  if (chapterTextOpenFor !== chapter || modal.hidden) return;
+
+  body.innerHTML = Array.from({ length: REVELATION.verses[chapter - 1] }, (_, i) => {
+    const found = texts.find(t => t.verse === i + 1);
+    return `
+      <div class="source-row">
+        <span class="verse-input-row__num">${i + 1}절</span>
+        <div class="source-row__text${found ? "" : " is-missing"}">${found ? escapeHtml(found.text) : "아직 본문이 등록되지 않았어요"}</div>
+      </div>`;
+  }).join("");
+}
+function closeChapterTextModal(){
+  chapterTextOpenFor = null;
+  document.getElementById("chapter-text-modal").hidden = true;
+}
+document.getElementById("btn-close-chapter-text").addEventListener("click", closeChapterTextModal);
+document.getElementById("chapter-text-modal").addEventListener("click", e => {
+  if (e.target.id === "chapter-text-modal") closeChapterTextModal();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !document.getElementById("chapter-text-modal").hidden) closeChapterTextModal();
+});
 
 function renderMemoChapter(){
   const chapter = memoChapterNum;
@@ -923,6 +1150,7 @@ async function getRevelationChapterText(chapter){
 
 async function openMemoVerse(chapter, verse){
   memoChapterNum = chapter;
+  updateMemoVerseNav(chapter, verse);
   const open = memoOpen = { chapter, verse, text: "" };
   const textEl = document.getElementById("memo-verse-text");
 
@@ -950,6 +1178,23 @@ async function openMemoVerse(chapter, verse){
   textEl.textContent = found.text;
   setMemoMode("view");
 }
+
+// 이전/다음 절 버튼 — 같은 장 안에서만. 없는 쪽 버튼은 자리는 그대로 두고 감춰서(visibility)
+// 남은 버튼이 좌우로 움직이지 않게 한다
+function updateMemoVerseNav(chapter, verse){
+  const last = REVELATION.verses[chapter - 1];
+  const prev = document.getElementById("btn-memo-prev"), next = document.getElementById("btn-memo-next");
+  prev.textContent = `‹ ${verse - 1}절`;
+  next.textContent = `${verse + 1}절 ›`;
+  prev.style.visibility = verse > 1 ? "visible" : "hidden";
+  next.style.visibility = verse < last ? "visible" : "hidden";
+}
+document.getElementById("btn-memo-prev").addEventListener("click", () => {
+  if (memoOpen && memoOpen.verse > 1) openMemoVerse(memoOpen.chapter, memoOpen.verse - 1);
+});
+document.getElementById("btn-memo-next").addEventListener("click", () => {
+  if (memoOpen && memoOpen.verse < REVELATION.verses[memoOpen.chapter - 1]) openMemoVerse(memoOpen.chapter, memoOpen.verse + 1);
+});
 
 // none: 본문 없음(불러오는 중/미등록) · view: 본문 보기 · test: 가리고 입력 · result: 채점 결과
 function setMemoMode(mode){
@@ -990,29 +1235,51 @@ function diffChars(a, b){
   return { aKeep, bKeep };
 }
 
+// 짝이 안 맞은 글자 표시: 글자는 빨강(is-wrong), 띄어쓰기(공백)는 주황(is-space)
+// — 공백은 빨갛게 칠해도 눈에 잘 안 띄어서, 어디를 띄어야(붙여야) 하는지 따로 보이게 하기 위함
 function markDiffChars(text, keep){
   return Array.from(text)
-    .map((ch, i) => keep[i] ? escapeHtml(ch) : `<span class="is-wrong">${escapeHtml(ch)}</span>`)
+    .map((ch, i) => keep[i] ? escapeHtml(ch)
+      : /\s/.test(ch) ? `<span class="is-space">${escapeHtml(ch)}</span>`
+      : `<span class="is-wrong">${escapeHtml(ch)}</span>`)
     .join("");
+}
+
+// 외워서 쓴 글(typed)을 원문(sourceText)과 비교한다. 띄어쓰기만 다르면 통과("space"), 글자가 다르면 오답.
+// 반환: { status: "ok"|"space"|"wrong", typedHTML, sourceHTML }
+function gradeMemoAnswer(typedText, sourceText){
+  const typed = normalizeVerseText(typedText);
+  const source = normalizeVerseText(sourceText);
+  // 띄어쓰기만 다른 경우(공백을 모두 빼면 같음)는 통과("space")로 본다 — 대신 다른 곳은 주황색으로 짚어준다
+  const noSpace = s => s.replace(/\s+/g, "");
+  const status = typed === source ? "ok" : noSpace(typed) === noSpace(source) ? "space" : "wrong";
+  const { aKeep, bKeep } = diffChars(typed, source);
+  return { status, typed, typedHTML: markDiffChars(typed, aKeep), sourceHTML: markDiffChars(source, bKeep) };
 }
 
 function gradeMemoTest(){
   if (!memoOpen || document.getElementById("memo-test").hidden) return;
   const input = document.getElementById("memo-test-input");
-  const typed = normalizeVerseText(input.value);
-  if (!typed){ input.focus(); return; }
-  const source = normalizeVerseText(memoOpen.text);
-  const correct = typed === source;
-  const { aKeep, bKeep } = diffChars(typed, source);
+  if (!normalizeVerseText(input.value)){ input.focus(); return; }
+  const g = gradeMemoAnswer(input.value, memoOpen.text);
 
-  document.getElementById("memo-result").innerHTML = correct
-    ? `<p class="memo-result__verdict is-correct">⭕ 정확해요! 다 외웠다면 '암기 완료'를 체크하세요.</p>
-       <div class="memo-result__text">${escapeHtml(typed)}</div>`
-    : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요. 빨간 글자를 확인해보세요.</p>
-       <div class="memo-result__label">내가 쓴 답 <small>(빨간 글자 = 틀리게 쓴 곳)</small></div>
-       <div class="memo-result__text">${markDiffChars(typed, aKeep)}</div>
-       <div class="memo-result__label">정답 <small>(빨간 글자 = 빠뜨리거나 다르게 쓴 곳)</small></div>
-       <div class="memo-result__text">${markDiffChars(source, bKeep)}</div>`;
+  const doneHint = " 다 외웠다면 '암기 완료'를 체크하세요.";
+  const compare = (typedNote, sourceNote) => `
+       <div class="memo-result__label">내가 쓴 답 <small>(${typedNote})</small></div>
+       <div class="memo-result__text">${g.typedHTML}</div>
+       <div class="memo-result__label">정답 <small>(${sourceNote})</small></div>
+       <div class="memo-result__text">${g.sourceHTML}</div>`;
+
+  document.getElementById("memo-result").innerHTML =
+    g.status === "ok"
+      ? `<p class="memo-result__verdict is-correct">⭕ 정확해요!${doneHint}</p>
+         <div class="memo-result__text">${escapeHtml(g.typed)}</div>`
+    : g.status === "space"
+      ? `<p class="memo-result__verdict is-correct">⭕ 통과! 내용은 다 맞아요.${doneHint}</p>
+         <p class="memo-result__note">다만 띄어쓰기가 원문과 달라요 — 주황색으로 표시된 곳을 원문대로 띄어 쓰거나 붙여 써 보세요.</p>
+         ${compare("주황색 = 원문에는 없는 띄어쓰기", "주황색 = 띄어 써야 하는 곳")}`
+      : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요. 빨간 글자를 확인해보세요.</p>
+         ${compare("빨간 글자 = 틀리게 쓴 곳 · 주황색 = 띄어쓰기", "빨간 글자 = 빠뜨리거나 다르게 쓴 곳 · 주황색 = 띄어쓰기")}`;
   setMemoMode("result");
 }
 

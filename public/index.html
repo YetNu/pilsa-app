@@ -169,29 +169,31 @@
       <!-- 2단계: 한 장의 절 목록 (체크박스 + 절) -->
       <div id="memo-chapter" hidden>
         <div class="memo-head">
-          <button class="btn btn--ghost" id="btn-memo-back-home">‹ 전체 장</button>
+          <button class="btn btn--ghost btn-back" id="btn-memo-back-home">‹ 전체 장</button>
           <h3 id="memo-chapter-title"></h3>
           <span class="memo-head__count" id="memo-chapter-count"></span>
         </div>
-        <p class="form-note">절을 누르면 본문을 보고 테스트할 수 있어요. 다 외웠으면 체크박스를 체크하세요.</p>
         <div class="memo-verse-list" id="memo-verse-list"></div>
       </div>
 
       <!-- 3단계: 한 절 보기 / 가리고 테스트 -->
       <div id="memo-verse" hidden>
         <div class="memo-head">
-          <button class="btn btn--ghost" id="btn-memo-back-chapter">‹ 절 목록</button>
+          <button class="btn btn--ghost btn-back" id="btn-memo-back-chapter">‹ 절 목록</button>
           <h3 id="memo-verse-title"></h3>
-          <!-- 가리기 ↔ 본문 보기는 항상 같은 자리에 — 마우스를 옮기지 않고 번갈아 누를 수 있게 -->
-          <button class="btn btn--primary memo-toggle" id="btn-memo-hide" hidden>가리기</button>
-          <button class="btn btn--ghost memo-toggle" id="btn-memo-show" hidden>본문 보기</button>
+          <!-- 제목 줄 오른쪽: 앞뒤 절 이동 -->
+          <div class="memo-head__right">
+            <div class="memo-verse-nav">
+              <button type="button" class="btn btn--ghost" id="btn-memo-prev">‹</button>
+              <button type="button" class="btn btn--ghost" id="btn-memo-next">›</button>
+            </div>
+          </div>
         </div>
 
         <div class="pilsa-panel">
           <div class="memo-verse-text" id="memo-verse-text"></div>
 
           <div id="memo-test" hidden>
-            <p class="form-note">외운 대로 입력한 뒤 확인을 눌러보세요. (Enter로도 확인돼요)</p>
             <textarea id="memo-test-input" class="typing-textarea" rows="4"
               spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
           </div>
@@ -202,9 +204,43 @@
             <label class="memo-done">
               <input type="checkbox" id="memo-verse-check"> 암기 완료
             </label>
+            <!-- 본문을 가리고 외운 대로 써 보는 테스트 시작 -->
+            <button class="btn btn--primary" id="btn-memo-hide" hidden>테스트</button>
+            <!-- 테스트 중에는 같은 자리에 "본문 보기" (테스트 ↔ 본문 보기를 같은 자리에서 번갈아 누를 수 있게) -->
+            <button class="btn btn--primary" id="btn-memo-show" hidden>본문 보기</button>
             <span class="memo-actions__spacer"></span>
-            <button class="btn btn--primary" id="btn-memo-grade" hidden>확인</button>
+            <button class="btn btn--primary" id="btn-memo-grade" hidden>채점하기</button>
             <button class="btn btn--primary" id="btn-memo-retry" hidden>다시하기</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 암기 테스트: 장과 절 범위를 골라, 필사하듯 절마다 입력칸에 외운 대로 쓰고 한꺼번에 채점 -->
+      <div id="memo-range" hidden>
+        <div class="memo-head">
+          <button class="btn btn--ghost btn-back" id="btn-memo-range-back">‹ 전체 장</button>
+          <h3>암기 테스트</h3>
+        </div>
+
+        <div class="week-box memo-range__picker">
+          <span>계시록</span>
+          <select id="memo-range-chapter" aria-label="장"></select>
+          <span>장 :</span>
+          <select id="memo-range-from" aria-label="시작 절"></select>
+          <span>~</span>
+          <select id="memo-range-to" aria-label="끝 절"></select>
+          <span>절</span>
+          <button type="button" class="btn btn--primary" id="btn-memo-range-start">테스트</button>
+        </div>
+
+        <div class="pilsa-panel" id="memo-range-panel" hidden>
+          <h3 id="memo-range-title"></h3>
+          <div class="verse-input-list" id="memo-range-list"></div>
+          <p class="memo-range__summary" id="memo-range-summary" hidden></p>
+          <div class="pilsa-panel__actions">
+            <button type="button" class="btn btn--ghost" id="btn-memo-range-reset">다시하기</button>
+            <button type="button" class="btn btn--primary" id="btn-memo-range-grade">채점하기</button>
           </div>
         </div>
       </div>
@@ -285,6 +321,15 @@
         <p class="form-note">가입 후 관리자 승인이 완료되면 로그인할 수 있어요.</p>
         <button type="submit" class="btn btn--primary">회원가입 신청</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ============ 계시록 장 전체 본문 (장 박스의 책 아이콘으로 열림) ============ -->
+  <div class="modal-overlay" id="chapter-text-modal" hidden>
+    <div class="modal-box modal-box--text" role="dialog" aria-modal="true" aria-labelledby="chapter-text-title">
+      <button type="button" class="modal-close" id="btn-close-chapter-text" aria-label="닫기">✕</button>
+      <h2 id="chapter-text-title" class="modal-box__title"></h2>
+      <div class="memo-chapter-text" id="chapter-text-body"></div>
     </div>
   </div>
 

@@ -16,8 +16,12 @@
   --red-ink:    #D92D20;   /* 오답/경고 */
   --green-ink:  #17803D;   /* 완료 */
 
-  --primary-bg: #FFFFFF; --primary-fg: #141414; --primary-hover: #EFEFEF; /* 주요 버튼 (다른 버튼과 같은 흰색) */
-  --head-bg:    #141414; --head-fg:    #FFFFFF;                          /* 표의 제목 칸 */
+  --primary-bg: #FFFFFF; --primary-fg: #141414; --primary-hover: #F2F2F2; /* 주요 버튼 (다른 버튼과 같은 흰색) */
+  /* 버튼은 테두리 대신 그림자로 바탕과 구분한다 — 평소 / 마우스를 올렸을 때 / 누르는 순간 */
+  --btn-shadow:        0 1px 2px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.08);
+  --btn-shadow-hover:  0 2px 4px rgba(0,0,0,.10), 0 6px 14px rgba(0,0,0,.10);
+  --btn-shadow-active: 0 1px 2px rgba(0,0,0,.12);
+  --head-bg:    #ECECEC; --head-fg:    #333333;                          /* 표의 제목 칸 (요일/필사/암기/완료…) — 검정 대신 옅은 회색 */
   --focus:      #EA580C;                                                 /* 키보드 포커스 표시 */
 
   /* rgba(var(--x-rgb), 투명도) 형태로 옅은 배경/그림자를 만들 때 쓰는 값 */
@@ -85,21 +89,22 @@ h1,h2,h3{ font-family: var(--serif); color: var(--ink); margin:0 0 .4em; }
   font-size: 1.15rem;
   letter-spacing: .08em;
 }
+/* 상단 메뉴는 버튼보다 "메뉴 글자"처럼 — 바탕 없이 글자만, 지금 보고 있는 화면은 옅은 회색 바탕 + 굵게 */
 .topbar__btn{
-  border:1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-  padding: 7px 16px;
-  border-radius: var(--radius);
+  border:none; background: transparent; box-shadow:none;
+  color: var(--ink-soft);
+  padding: 8px 14px;
+  border-radius: 10px;
   cursor:pointer;
-  font-size:.85rem;
-  letter-spacing:.03em;
+  font-size:.88rem; font-weight:500;
+  letter-spacing:.02em;
   transition: background .15s, color .15s;
 }
-.topbar__btn:hover{ background: var(--ink); color: var(--card); }
+.topbar__btn:hover{ background: rgba(var(--ink-rgb),.06); color: var(--ink); }
+.topbar__btn.is-active{ background: rgba(var(--ink-rgb),.08); color: var(--ink); font-weight:700; }
 .topbar__left, .topbar__right{ display:flex; align-items:center; gap:8px; }
-.topbar__btn--logout{ border-color: var(--rule); color: var(--ink-soft); }
-.topbar__btn--logout:hover{ background: var(--red-ink); color: var(--card); border-color: var(--red-ink); }
+.topbar__btn--logout{ color: var(--ink-soft); font-size:.8rem; }
+.topbar__btn--logout:hover{ background: rgba(var(--red-rgb),.08); color: var(--red-ink); }
 
 /* ===========================================================
    공통
@@ -116,13 +121,26 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   padding: 10px 20px;
   font-size:.9rem;
   cursor:pointer;
-  border:1px solid var(--ink);
+  border:none;
+  background: var(--card); color: var(--ink);
+  box-shadow: var(--btn-shadow);
   letter-spacing:.02em;
+  transition: background .15s, box-shadow .15s, transform .15s;
 }
+.btn:hover{ box-shadow: var(--btn-shadow-hover); transform: translateY(-1px); }
+.btn:active{ box-shadow: var(--btn-shadow-active); transform:none; }
+.btn:disabled{ opacity:.5; cursor:not-allowed; box-shadow: var(--btn-shadow); transform:none; }
 .btn--primary{ background: var(--primary-bg); color: var(--primary-fg); font-weight:600; }
 .btn--primary:hover{ background: var(--primary-hover); }
-.btn--ghost{ background:transparent; color:var(--ink); }
-.btn--ghost:hover{ background: rgba(var(--ink-rgb),.07); }
+.btn--ghost{ background: var(--card); color:var(--ink); }
+.btn--ghost:hover{ background: var(--card); }
+/* "‹ 전체 장" / "‹ 절 목록" 같은 뒤로 가기 — 버튼처럼 튀지 않게 바탕·그림자 없이 회색 글자만 */
+.btn.btn-back, #memo-verse .btn.btn-back, #memo-range .btn.btn-back{
+  background: transparent; box-shadow:none; transform:none;
+  color: var(--ink-soft); font-weight:500; font-size:.88rem;
+  padding: 7px 10px 7px 6px;
+}
+.btn.btn-back:hover, #memo-verse .btn.btn-back:hover, #memo-range .btn.btn-back:hover{ background: rgba(var(--ink-rgb),.06); color: var(--ink); box-shadow:none; transform:none; }
 .link-btn{
   background:none; border:none; color: var(--red-ink);
   text-decoration:underline; cursor:pointer; font-size:.85rem; padding:0; margin-left:8px;
@@ -201,6 +219,9 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 }
 .modal-close:hover{ color: var(--ink); }
 
+/* 장 전체 본문 창 — 내용이 길어서 창 안에서 스크롤 */
+.modal-box--text{ max-width: 680px; max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); display:flex; flex-direction:column; padding: 24px 20px 20px; }
+.modal-box--text .memo-chapter-text{ flex:1; min-height:0; overflow-y:auto; padding-right:4px; } /* min-height:0 이 있어야 창 높이 안에서 스크롤된다 */
 .modal-box--alert{
   max-width: 420px;
   text-align:center;
@@ -240,10 +261,13 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   padding: 14px 16px 18px; margin-bottom: 22px;
 }
 .week-box__nav{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:10px; }
+/* 주 이동 화살표 — 상단 메뉴·뒤로 가기처럼 바탕·그림자 없이, 마우스를 올리면 옅은 회색 동그라미 */
 .week-arrow{
-  background:none; border:1px solid var(--rule); border-radius: var(--radius);
-  width:30px; height:30px; cursor:pointer; font-size:1rem; color:var(--ink);
+  background: transparent; border:none; border-radius:50%; box-shadow:none;
+  width:32px; height:32px; cursor:pointer; font-size:1.15rem; line-height:1; color: var(--ink-soft);
+  transition: background .15s, color .15s;
 }
+.week-arrow:hover{ background: rgba(var(--ink-rgb),.07); color: var(--ink); }
 .week-range{ font-family: var(--mono); font-size:.85rem; color:var(--ink-soft); min-width:120px; text-align:center; }
 
 .week-warning{
@@ -405,12 +429,24 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .memo-total{ font-size:.85rem; color:var(--ink-soft); margin: 0 2px 12px; }
 .memo-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap:10px; }
 .memo-chapter-box{
-  display:flex; flex-direction:column; align-items:flex-start; gap:4px;
+  position:relative;
   background: var(--card); border:1px solid var(--rule); border-radius: var(--radius);
-  padding: 12px 12px 10px; cursor:pointer; color: var(--ink); text-align:left;
   transition: border-color .15s, background .15s;
 }
 .memo-chapter-box:hover{ border-color: var(--ink); background: rgba(var(--accent-rgb),.08); }
+.memo-chapter-box__main{
+  display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%;
+  background:none; border:none; border-radius: var(--radius);
+  padding: 12px 12px 10px; cursor:pointer; color: var(--ink); text-align:left; font: inherit;
+}
+/* 오른쪽 위 책 아이콘 — 누르면 그 장의 전체 본문 창 */
+.memo-chapter-box__text{
+  position:absolute; top:8px; right:8px;
+  width:30px; height:30px; padding:0; display:grid; place-items:center;
+  background: var(--card); border:none; border-radius:50%; box-shadow: var(--btn-shadow);
+  color: var(--ink-soft); cursor:pointer; transition: box-shadow .15s, color .15s;
+}
+.memo-chapter-box__text:hover{ color: var(--ink); box-shadow: var(--btn-shadow-hover); }
 .memo-chapter-box__num{ font-family: var(--serif); font-weight:600; font-size:1.05rem; }
 .memo-chapter-box__count{ font-family: var(--mono); font-size:.75rem; color: var(--ink-soft); }
 .memo-chapter-box__bar{
@@ -423,7 +459,8 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 
 .memo-head{ display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
 .memo-head h3{ margin:0; font-size:1.1rem; }
-.memo-toggle{ margin-left:auto; min-width:104px; }
+/* 테스트 ↔ 본문 보기는 같은 자리에서 번갈아 나오므로 폭도 같게 */
+#btn-memo-hide, #btn-memo-show{ min-width:100px; }
 .memo-head__count{ margin-left:auto; font-family: var(--mono); font-size:.85rem; color: var(--ink-soft); }
 
 .memo-verse-list{ display:grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap:8px; margin-top:12px; }
@@ -455,18 +492,91 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   padding: 14px 16px; word-break: keep-all; overflow-wrap: break-word;
 }
 .memo-verse-text{ user-select:none; -webkit-user-select:none; }
+/* 한 절 외우기 화면: 본문이 주인공 — 글자를 크게, 테두리 없이 넉넉하게 */
+#memo-verse-text{
+  font-size:1.32rem; line-height:2; font-weight:500; color: var(--ink);
+  border:none; padding: 18px 8px 22px; letter-spacing:.01em;
+}
+/* 같은 화면(과 암기 테스트 화면)의 버튼들은 한발 물러나게 — 그림자·굵은 글씨 없이 작고 옅은 회색 바탕 */
+#memo-verse .btn, #memo-verse .memo-done, #memo-range .btn{
+  box-shadow:none; transform:none;
+  background: rgba(var(--ink-rgb),.05); color: var(--ink-soft);
+  font-size:.82rem; font-weight:500; padding: 7px 14px;
+}
+#memo-verse .btn:hover, #memo-verse .memo-done:hover, #memo-range .btn:hover{ background: rgba(var(--ink-rgb),.10); color: var(--ink); box-shadow:none; transform:none; }
+#memo-verse .memo-done input{ width:14px; height:14px; }
+#memo-verse .memo-done:has(input:checked){ color: var(--green-ink); background: #EAF4EE; }
+#memo-verse .memo-verse-nav .btn{ min-width:64px; }
+#memo-verse #btn-memo-hide, #memo-verse #btn-memo-show{ min-width:84px; }
+#memo-verse .memo-head h3{ font-size:1rem; color: var(--ink-soft); font-weight:600; }
+/* 테스트 입력칸 글자도 본문처럼 크게 */
+#memo-test-input{ font-size:1.2rem; line-height:2; }
 .memo-result__verdict{ font-weight:600; margin: 0 0 12px; }
 .memo-result__verdict.is-correct{ color: var(--green-ink); }
 .memo-result__verdict.is-wrong{ color: var(--red-ink); }
-.memo-result__label{ font-size:.8rem; color: var(--ink-soft); margin: 12px 0 5px; }
-.memo-result__label small{ font-size:.72rem; }
+.memo-result__label{ font-size:.92rem; font-weight:700; color: var(--ink); margin: 14px 0 6px; } /* "내가 쓴 답" / "정답" */
+.memo-result__label small{ font-size:.75rem; font-weight:400; color: var(--ink-soft); }
 .memo-result__text{ white-space: pre-wrap; }
 .memo-result__text .is-wrong{ color: var(--red-ink); font-weight:700; background: rgba(var(--red-rgb),.14); }
+/* 띄어쓰기만 다른 곳 — 공백 한 칸이 주황색 칸으로 보인다 */
+.memo-result__text .is-space{ background: rgba(var(--accent-rgb),.45); border-radius:3px; padding: 0 2px; }
+.memo-result__note{ font-size:.85rem; color: var(--gold); margin: -6px 0 10px; }
 
+/* 암기 테스트 — 1~22장 박스 뒤에 붙는 같은 크기·같은 색의 박스 (시험지 + 연필 아이콘) */
+/* 아이콘 위 + 글자 아래. 장 박스와 같은 폭·높이 안에 들어가게 아이콘과 글자 크기를 맞춘다 */
+.memo-test-box{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  padding: 8px 4px; cursor:pointer; color: var(--ink); font: inherit; text-align:center;
+}
+.memo-test-box__icon{ overflow:visible; width:30px; height:30px; }
+.memo-test-box__label{ font-family: var(--serif); font-weight:700; font-size:.95rem; white-space:nowrap; }
+/* 마우스를 올리면 연필이 사각사각 움직이고 체크 표시가 그려진다 */
+.memo-test-box__pencil{ transform-origin: 22px 31px; transform-box: view-box; }
+.memo-test-box__check{ stroke-dasharray: 12; stroke-dashoffset: 0; }
+.memo-test-box:hover .memo-test-box__pencil{ animation: memo-pencil .5s ease-in-out infinite alternate; }
+.memo-test-box:hover .memo-test-box__check{ animation: memo-check .6s ease-out; }
+@keyframes memo-pencil{ from{ transform: rotate(-6deg) translateX(-1px); } to{ transform: rotate(6deg) translateX(1px); } }
+@keyframes memo-check{ from{ stroke-dashoffset: 12; } to{ stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce){
+  .memo-test-box:hover .memo-test-box__pencil, .memo-test-box:hover .memo-test-box__check{ animation:none; }
+}
+.memo-range__picker{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:.95rem; }
+.memo-range__picker select{
+  border:none; border-bottom:1px solid var(--rule); background:transparent;
+  padding:5px 2px; font-size:16px; color: var(--ink); outline:none; min-width:52px;
+}
+.memo-range__picker .btn{ margin-left:6px; } /* "절" 글자 바로 오른쪽에 붙게 */
+.memo-range__result{ margin-top:8px; }
+.memo-range__result .memo-result__verdict{ margin-bottom:6px; font-size:.9rem; }
+.memo-range__result .memo-result__text{ font-size:1rem; padding: 8px 12px; }
+.memo-range__result .memo-result__label{ margin: 10px 0 5px; }
+.verse-input-row.is-ok .memo-range__box, .verse-input-row.is-space .memo-range__box{ border-color: var(--green-ink); }
+.verse-input-row.is-wrong .memo-range__box{ border-color: var(--red-ink); }
+/* 테스트 입력칸은 오타 색 겹침(overlay) 없이 글자를 그대로 보여준다 (외워서 쓰는 거라 실시간 정답 표시는 안 함) */
+.memo-range__input{ color: var(--ink); }
+.memo-range__input:disabled{ background: rgba(var(--ink-rgb),.04); cursor:not-allowed; }
+.memo-range__summary{ font-size:.95rem; margin: 14px 0 0; }
+
+.memo-chapter-text{ user-select:none; -webkit-user-select:none; }
+.memo-chapter-text .source-row + .source-row{ margin-top:6px; }
+.memo-chapter-text .source-row__text.is-missing{ color: var(--ink-soft); font-size:.9rem; }
+.memo-head__right{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+.memo-verse-nav{ display:flex; gap:8px; } /* 이전·다음 절 버튼을 나란히 */
+.memo-verse-nav .btn{ min-width:84px; } /* 절 번호 자릿수(9절↔10절)가 바뀌어도 버튼 폭이 그대로라 위치가 안 흔들리게 */
 .memo-actions{ align-items:center; flex-wrap:wrap; }
 .memo-actions__spacer{ flex:1; }
-.memo-done{ display:flex; align-items:center; gap:7px; font-size:.9rem; cursor:pointer; }
-.memo-done input{ width:20px; height:20px; accent-color: var(--green-ink); cursor:pointer; }
+/* "암기 완료"도 옆의 "테스트" 버튼(.btn)과 같은 모양 — 같은 높이·테두리·둥근 모서리·글자.
+   안에 체크박스가 있고, 체크되면 초록색으로 바뀐다 */
+.memo-done{
+  display:inline-flex; align-items:center; gap:8px;
+  border:none; border-radius: var(--radius); box-shadow: var(--btn-shadow);
+  padding: 10px 18px; background: var(--card);
+  font-size:.9rem; font-weight:600; letter-spacing:.02em; line-height:normal;
+  cursor:pointer; user-select:none; transition: background .15s, color .15s, box-shadow .15s, transform .15s;
+}
+.memo-done:hover{ box-shadow: var(--btn-shadow-hover); transform: translateY(-1px); }
+.memo-done input{ width:16px; height:16px; margin:0; accent-color: var(--green-ink); cursor:pointer; }
+.memo-done:has(input:checked){ color: var(--green-ink); background: #EAF4EE; }
 
 /* ===========================================================
    관리자
