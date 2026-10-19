@@ -855,21 +855,7 @@ function renderMemoHome(){
           </svg>
         </button>
       </div>`;
-  }).join("") +
-    // 22장 다음 칸 = 암기 테스트 (장 박스와 같은 크기)
-    `<button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-range" title="암기 테스트">
-      <svg class="memo-test-box__icon" viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="6" width="24" height="32" rx="3" fill="var(--card)"/>
-        <path d="M14 14h11M14 20h8M14 26h10"/>
-        <path class="memo-test-box__check" d="M15.5 32l2.5 2.5 5-5"/>
-        <g class="memo-test-box__pencil">
-          <path d="M36 12l5 5-14 14-6 1 1-6z" fill="var(--card)"/>
-          <path d="M33 15l5 5"/>
-        </g>
-      </svg>
-      <span class="memo-test-box__label">암기 테스트</span>
-    </button>`;
-  document.getElementById("btn-memo-range").addEventListener("click", openMemoRange);
+  }).join("");
   grid.querySelectorAll("[data-chapter]").forEach(btn =>
     btn.addEventListener("click", () => openMemoChapter(Number(btn.dataset.chapter))));
   grid.querySelectorAll("[data-chapter-text]").forEach(btn =>
@@ -1097,6 +1083,7 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pagehide", wipeMemoAnswersOnLeave);
 
+document.getElementById("btn-memo-range").addEventListener("click", openMemoRange);
 document.getElementById("btn-memo-range-back").addEventListener("click", renderMemoHome);
 document.getElementById("btn-memo-range-start").addEventListener("click", startMemoRange);
 document.getElementById("btn-memo-range-grade").addEventListener("click", gradeMemoRange);
@@ -1532,10 +1519,52 @@ document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(btn => {
     btn.classList.add("is-active");
     ["pending","members","assign","content","memoplan"].forEach(t =>
       document.getElementById(`admin-${t}`).hidden = t !== btn.dataset.adminTab);
+    if (btn.dataset.adminTab === "content") jumpToFirstEmptyChapter();
   });
 });
 
+// 관리자 화면에 들어온 뒤 "본문 입력" 탭을 처음 열면, 아직 본문이 없는 첫 장으로 바로 띄운다
+// (서신서 순서 → 요한계시록. 요한계시록은 절 수를 알고 있어서 일부만 넣은 장도 "덜 넣은 장"으로 본다)
+// 입력하던 내용이 있으면 덮어쓰지 않도록, 관리자 화면에 들어올 때마다 한 번만 하고 입력칸이 비어 있을 때만 한다
+let contentAutoPicked = false;
+async function jumpToFirstEmptyChapter(){
+  if (contentAutoPicked) return;
+  contentAutoPicked = true;
+  const textarea = document.getElementById("content-textarea");
+  if (textarea.value.trim()) return;
+  const statusEl = document.getElementById("content-status");
+  statusEl.textContent = "아직 입력하지 않은 장을 찾는 중…";
+
+  let list;
+  try { list = (await api("/chapters")).chapters; }
+  catch (err){ statusEl.textContent = err.message; return; }
+  const saved = new Map(list.map(c => [c.book + "|" + c.chapter, c.verses]));
+
+  let target = null;
+  for (const b of CONTENT_BOOKS){
+    for (let c = 1; c <= b.chapters && !target; c++){
+      const count = saved.get(b.book + "|" + c) || 0;
+      const expected = b.book === REVELATION.book ? REVELATION.verses[c - 1] : 1;
+      if (count < expected) target = { book: b.book, chapter: c, count, expected };
+    }
+    if (target) break;
+  }
+  if (textarea.value.trim()) return; // 찾는 사이에 입력을 시작했으면 건드리지 않는다
+  if (!target){ statusEl.textContent = "모든 장의 본문이 입력되어 있어요."; return; }
+
+  const bookSel = document.getElementById("content-book");
+  const chapterInput = document.getElementById("content-chapter");
+  bookSel.value = target.book;
+  chapterInput.max = CONTENT_BOOKS.find(b => b.book === target.book).chapters;
+  chapterInput.value = target.chapter;
+  await loadChapterContent();
+  statusEl.textContent = target.count
+    ? `아직 덜 입력된 첫 장이에요 — ${target.book} ${target.chapter}장 (${target.count} / ${target.expected}절 입력됨).`
+    : `아직 입력하지 않은 첫 장이에요 — ${target.book} ${target.chapter}장.`;
+}
+
 async function renderAdmin(){
+  contentAutoPicked = false; // 관리자 화면에 다시 들어오면 본문 입력 탭을 열 때 다시 빈 장을 찾는다
   const pendingEl = document.getElementById("admin-pending");
   pendingEl.innerHTML = `<p class="form-note">불러오는 중…</p>`;
 

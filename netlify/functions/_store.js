@@ -214,6 +214,22 @@ async function getChapterVerses(book, chapter){
     .sort((a, b) => a.verse - b.verse);
 }
 
+// 책·장마다 저장된 절이 몇 개인지 (관리자 본문 입력 화면에서 아직 안 넣은 장을 찾는 데 씀)
+// 반환: [{ book, chapter, verses }]
+async function getChapterCounts(){
+  const rows = await getChaptersRaw();
+  const counts = new Map();
+  rows.forEach(r => {
+    if (!r[0]) return;
+    const key = r[0] + "|" + Number(r[1]);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts].map(([key, verses]) => {
+    const [book, chapter] = key.split("|");
+    return { book, chapter: Number(chapter), verses };
+  });
+}
+
 // 해당 책/장의 기존 절을 전부 지우고 새로 저장 (부분 수정이 아니라 통째로 교체)
 async function setChapterVerses(book, chapter, verses){
   const sheets = await getSheetsClient();
@@ -311,6 +327,6 @@ module.exports = {
   getUsers, addUser, updateUser, removeUser, reorderUsers,
   getSubmissions, addSubmission,
   getConfig, setConfig,
-  getChapterVerses, setChapterVerses,
+  getChapterVerses, setChapterVerses, getChapterCounts,
   getMemoChecks, setMemoCheck,
 };

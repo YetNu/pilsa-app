@@ -160,7 +160,22 @@
           <p class="status-week-avg" id="memo-week-pct"></p>
         </div>
 
-        <p class="memo-total" id="memo-total"></p>
+        <div class="memo-total-row">
+          <p class="memo-total" id="memo-total"></p>
+          <!-- 암기 테스트 — 장 박스와 같은 모양의 작은 박스 -->
+          <button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-range" title="암기 테스트">
+            <svg class="memo-test-box__icon" viewBox="0 0 48 48" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="6" width="24" height="32" rx="3" fill="var(--card)"/>
+              <path d="M14 14h11M14 20h8M14 26h10"/>
+              <path class="memo-test-box__check" d="M15.5 32l2.5 2.5 5-5"/>
+              <g class="memo-test-box__pencil">
+                <path d="M36 12l5 5-14 14-6 1 1-6z" fill="var(--card)"/>
+                <path d="M33 15l5 5"/>
+              </g>
+            </svg>
+            <span class="memo-test-box__label">암기 테스트</span>
+          </button>
+        </div>
         <div class="memo-grid" id="memo-chapter-grid">
           <!-- JS로 1~22장 박스가 채워짐 -->
         </div>

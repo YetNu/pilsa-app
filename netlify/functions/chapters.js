@@ -2,12 +2,17 @@ const store = require("./_store");
 const { requireUser, requireAdmin } = require("./_auth");
 
 // GET  ?book=로마서&chapter=1        → 로그인한 회원 누구나 (필사 화면에서 원문 조회)
+// GET  (book, chapter 없이)          → 관리자 전용: 책·장마다 저장된 절 수 [{ book, chapter, verses }]
 // POST { book, chapter, verses }    → 관리자 전용 (해당 장의 원문을 통째로 저장/교체)
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "GET"){
       requireUser(event);
       const { book, chapter } = event.queryStringParameters || {};
+      if (!book && !chapter){
+        requireAdmin(event);
+        return json(200, { chapters: await store.getChapterCounts() });
+      }
       if (!book || !chapter) return json(400, { error: "book, chapter가 필요해요." });
       const verses = await store.getChapterVerses(book, Number(chapter));
       return json(200, { verses });

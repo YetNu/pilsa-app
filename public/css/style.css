@@ -524,14 +524,17 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .memo-result__text .is-space{ background: rgba(var(--accent-rgb),.45); border-radius:2px; }
 .memo-result__note{ font-size:.85rem; color: var(--gold); margin: -6px 0 10px; }
 
-/* 암기 테스트 — 1~22장 박스 뒤에 붙는 같은 크기·같은 색의 박스 (시험지 + 연필 아이콘) */
+/* 암기 테스트 — 장 박스와 같은 색·테두리의 작은 박스 (시험지 + 연필 아이콘) */
 /* 아이콘 위 + 글자 아래. 장 박스와 같은 폭·높이 안에 들어가게 아이콘과 글자 크기를 맞춘다 */
+/* "전체 진행 n / 404절" 줄 — 왼쪽 글, 오른쪽 끝에 작은 암기 테스트 박스 */
+.memo-total-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin: 0 0 12px; }
+.memo-total-row .memo-total{ margin:0 2px; }
 .memo-test-box{
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
-  padding: 8px 4px; cursor:pointer; color: var(--ink); font: inherit; text-align:center;
+  display:inline-flex; align-items:center; gap:6px;
+  padding: 6px 14px 6px 10px; cursor:pointer; color: var(--ink); font: inherit;
 }
-.memo-test-box__icon{ overflow:visible; width:30px; height:30px; }
-.memo-test-box__label{ font-family: var(--serif); font-weight:700; font-size:.95rem; white-space:nowrap; }
+.memo-test-box__icon{ overflow:visible; width:22px; height:22px; flex-shrink:0; }
+.memo-test-box__label{ font-family: var(--serif); font-weight:700; font-size:.88rem; white-space:nowrap; }
 /* 마우스를 올리면 연필이 사각사각 움직이고 체크 표시가 그려진다 */
 .memo-test-box__pencil{ transform-origin: 22px 31px; transform-box: view-box; }
 .memo-test-box__check{ stroke-dasharray: 12; stroke-dashoffset: 0; }
