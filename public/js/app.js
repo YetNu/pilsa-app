@@ -1012,17 +1012,23 @@ function gradeMemoRange(){
   const rows = [...document.querySelectorAll("#memo-range-list .verse-input-row")];
   const counts = { ok: 0, space: 0, wrong: 0, skipped: 0 };
 
+  // 채점하면 입력칸을 감추고, 그 자리에 내가 쓴 답(틀린 곳 표시)을 바로 보여준다 — 그 아래 판정과 정답.
+  // 다시 쓰려면 "다시하기" (입력칸이 새로 만들어진다)
   memoRange.verses.forEach((v, i) => {
     const row = rows[i];
     const input = row.querySelector("textarea");
+    const box = row.querySelector(".memo-range__box");
     const resultEl = row.querySelector(".memo-range__result");
     row.classList.remove("is-ok", "is-space", "is-wrong");
     if (v.text === null){ counts.skipped++; resultEl.hidden = true; return; }
+    input.blur();
+    box.hidden = true;
 
     if (!normalizeVerseText(input.value)){
       counts.wrong++;
       row.classList.add("is-wrong");
-      resultEl.innerHTML = `<p class="memo-result__verdict is-wrong">❌ 입력하지 않았어요</p>
+      resultEl.innerHTML = `<div class="memo-result__text memo-range__typed is-empty">(입력하지 않았어요)</div>
+        <p class="memo-result__verdict is-wrong">❌ 입력하지 않았어요</p>
         <div class="memo-result__label">정답</div><div class="memo-result__text">${escapeHtml(normalizeVerseText(v.text))}</div>`;
       resultEl.hidden = false;
       return;
@@ -1031,13 +1037,12 @@ function gradeMemoRange(){
     const g = gradeMemoAnswer(input.value, v.text);
     counts[g.status]++;
     row.classList.add(`is-${g.status}`);
+    const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
     resultEl.innerHTML =
-      g.status === "ok" ? `<p class="memo-result__verdict is-correct">⭕ 정확해요</p>`
-      : g.status === "space" ? `<p class="memo-result__verdict is-correct">⭕ 통과 — 띄어쓰기만 원문과 달라요 (주황색)</p>
-          <div class="memo-result__label">내가 쓴 답</div><div class="memo-result__text">${g.typedHTML}</div>
+      g.status === "ok" ? `${typed}<p class="memo-result__verdict is-correct">⭕ 정확해요</p>`
+      : g.status === "space" ? `${typed}<p class="memo-result__verdict is-correct">⭕ 통과 — 띄어쓰기만 원문과 달라요 (주황색)</p>
           <div class="memo-result__label">정답</div><div class="memo-result__text">${g.sourceHTML}</div>`
-      : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요 (빨강 = 글자, 주황 = 띄어쓰기)</p>
-          <div class="memo-result__label">내가 쓴 답</div><div class="memo-result__text">${g.typedHTML}</div>
+      : `${typed}<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요 (빨강 = 글자, 주황 = 띄어쓰기)</p>
           <div class="memo-result__label">정답</div><div class="memo-result__text">${g.sourceHTML}</div>`;
     resultEl.hidden = false;
   });
@@ -1078,7 +1083,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden"){ wipeMemoAnswersOnLeave(); return; }
   if (memoWipedWhileAway){
     memoWipedWhileAway = false;
-    showAlertModal("다른 화면으로 나갔다 와서 입력한 내용이 지워졌어요. 처음부터 다시 써 주세요.");
+    showAlertModal("다른 화면으로 나갔다 와서\n입력한 내용이 지워졌습니다.\n처음부터 다시 입력 바랍니다.");
   }
 });
 window.addEventListener("pagehide", wipeMemoAnswersOnLeave);

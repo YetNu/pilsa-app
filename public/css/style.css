@@ -227,6 +227,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   text-align:center;
 }
 .modal-box__message{
+  white-space: pre-line; /* 메시지 안의 줄바꿈(\n)을 그대로 보여준다 */
   font-family: var(--serif);
   font-size: 1.25rem;
   color: var(--ink);
@@ -551,7 +552,12 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   padding:5px 2px; font-size:16px; color: var(--ink); outline:none; min-width:52px;
 }
 .memo-range__picker .btn{ margin-left:6px; } /* "절" 글자 바로 오른쪽에 붙게 */
-.memo-range__result{ margin-top:8px; }
+.memo-range__result{ margin-top:0; }
+/* 채점 후 입력칸 자리에 들어가는 "내가 쓴 답" — 입력칸과 같은 테두리, 판정에 따라 초록/빨강 */
+.memo-range__result .memo-range__typed{ margin-bottom:8px; }
+.verse-input-row.is-ok .memo-range__typed, .verse-input-row.is-space .memo-range__typed{ border-color: var(--green-ink); }
+.verse-input-row.is-wrong .memo-range__typed{ border-color: var(--red-ink); }
+.memo-range__typed.is-empty{ color: var(--ink-soft); }
 .memo-range__result .memo-result__verdict{ margin-bottom:6px; font-size:.9rem; }
 /* 결과 글상자를 바로 위 입력칸(.verse-input-row__textarea)과 똑같이 맞춘다 — 테두리 1px + 좌우 여백 12px,
    같은 글꼴·크기·줄간격·줄바꿈 규칙이라 내가 쓴 글과 같은 자리에서 시작하고 같은 곳에서 줄이 바뀐다 */
