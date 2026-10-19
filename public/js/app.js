@@ -823,6 +823,7 @@ async function renderMemo(){
 
 /* ---------- 1단계: 주간 박스 + 1~22장 박스 ---------- */
 function renderMemoHome(){
+  leaveMemoTestScreen();
   showMemoSection("home");
   renderMemoWeekBox();
 
@@ -941,6 +942,8 @@ async function startMemoRange(){
   const from = Number(document.getElementById("memo-range-from").value);
   const to = Number(document.getElementById("memo-range-to").value);
   if (!chapter || !from || !to){ showAlertModal("장과 절을 선택해주세요."); return; }
+  // 전체화면 요청은 버튼을 누른 그 순간(다른 await 전에)에 해야 브라우저가 허락한다
+  if (!(await enterMemoTestScreen())) return;
   const panel = document.getElementById("memo-range-panel");
   const list = document.getElementById("memo-range-list");
   const btn = document.getElementById("btn-memo-range-start");
@@ -1063,6 +1066,96 @@ function resetMemoRange(focusFirst = true){
   buildMemoRangeRows(focusFirst);
 }
 
+/* ---------- 범위 암기 테스트는 전체화면에서만 ----------
+   - 테스트를 누르면 전체화면으로 바꾼다. 전체화면을 거부하면 시작하지 않는다.
+   - 채점 전에 전체화면이 풀리면(Esc, Alt+Tab 등) 테스트를 닫고 입력한 내용을 지운다.
+   - 폰·태블릿: 분할 화면(갤럭시 멀티윈도우 등)이나 팝업 창처럼 화면 일부만 쓰고 있으면 시작하지 않고,
+     도중에 그렇게 바뀌어도 테스트를 닫는다. (키보드가 올라와 세로가 줄어드는 건 분할 화면으로 보지 않는다)
+   - 아이폰처럼 브라우저가 전체화면 기능 자체를 지원하지 않으면 전체화면 없이 진행하되, 위의 화면 크기 검사는 한다 */
+const memoFullscreenSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+let memoWeEnteredFullscreen = false;
+function isMemoFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function isTouchDevice(){ return window.matchMedia("(hover: none) and (pointer: coarse)").matches; }
+
+// 폰·태블릿에서 이 창이 화면 전체를 쓰고 있는지 (분할 화면/작은 창이면 false)
+function memoScreenLooksFull(){
+  if (!isTouchDevice()) return true; // PC는 전체화면 여부로만 판단 (확대 배율에 따라 화면 크기 값이 달라져서)
+  const typing = document.activeElement && document.activeElement.classList.contains("memo-range__input");
+  if (window.innerWidth < screen.width * 0.95) return false;               // 좌우로 나눈 분할 화면·팝업 창
+  if (!typing && window.innerHeight < screen.height * 0.72) return false;  // 위아래로 나눈 분할 화면 (키보드 때문이 아닐 때)
+  return true;
+}
+
+async function enterMemoTestScreen(){
+  if (memoFullscreenSupported && !isMemoFullscreen()){
+    const el = document.documentElement;
+    try {
+      await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen());
+      memoWeEnteredFullscreen = true;
+    } catch {
+      showAlertModal("암기 테스트는 전체화면에서만 볼 수 있어요.\n전체화면을 허용한 뒤 다시 눌러 주세요.");
+      return false;
+    }
+    await new Promise(r => setTimeout(r, 400)); // 전체화면으로 바뀌며 화면 크기가 다시 잡힐 때까지
+  }
+  if (!memoScreenLooksFull()){
+    leaveMemoTestScreen();
+    showAlertModal("분할 화면이나 작은 창에서는\n암기 테스트를 볼 수 없어요.\n화면 전체로 연 뒤 다시 눌러 주세요.");
+    return false;
+  }
+  return true;
+}
+
+function leaveMemoTestScreen(){
+  if (memoWeEnteredFullscreen && isMemoFullscreen()){
+    memoWeEnteredFullscreen = false;
+    const done = (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    if (done && done.catch) done.catch(() => {});
+  }
+  memoWeEnteredFullscreen = false;
+}
+
+// 채점 전 테스트가 진행 중인지
+function memoRangeTestInProgress(){
+  return !document.getElementById("memo-range").hidden && !!memoRange
+    && !document.getElementById("memo-range-panel").hidden
+    && document.getElementById("memo-range-summary").hidden;
+}
+
+// 규칙을 어기면 테스트 창을 닫고(입력한 내용은 버림) 이유를 알려준다 — 다시 하려면 "테스트"를 새로 누른다
+function abortMemoRangeTest(message){
+  memoRange = null;
+  document.querySelectorAll("#memo-range-list .memo-range__input").forEach(t => t.blur());
+  document.getElementById("memo-range-list").innerHTML = "";
+  document.getElementById("memo-range-panel").hidden = true;
+  memoWipedWhileAway = false; // 따로 알림을 띄우므로 "나갔다 와서…" 알림은 겹쳐 띄우지 않는다
+  showAlertModal(message);
+}
+
+function onMemoFullscreenChange(){
+  if (isMemoFullscreen()) return;
+  const wasOurs = memoWeEnteredFullscreen;
+  memoWeEnteredFullscreen = false;
+  if (memoFullscreenSupported && wasOurs && memoRangeTestInProgress()){
+    abortMemoRangeTest("전체화면이 해제되어\n입력한 내용이 지워졌습니다.\n다시 하려면 테스트를 눌러 주세요.");
+  }
+}
+document.addEventListener("fullscreenchange", onMemoFullscreenChange);
+document.addEventListener("webkitfullscreenchange", onMemoFullscreenChange);
+
+// 폰·태블릿: 테스트 도중 분할 화면으로 바뀌는지 — 키보드가 올라오고 내려가는 동안의 크기 변화는
+// 잠깐 기다렸다가(0.7초) 그래도 화면 일부만 쓰고 있으면 분할 화면으로 본다
+let memoResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (!isTouchDevice()) return;
+  clearTimeout(memoResizeTimer);
+  memoResizeTimer = setTimeout(() => {
+    if (memoRangeTestInProgress() && !memoScreenLooksFull()){
+      abortMemoRangeTest("분할 화면으로 바뀌어\n입력한 내용이 지워졌습니다.\n화면 전체로 연 뒤 다시 테스트를 눌러 주세요.");
+    }
+  }, 700);
+});
+
 // 범위 암기 테스트 중에 다른 화면(다른 앱·탭)으로 나가면 입력한 내용을 바로 지운다 (한 절 테스트는 지우지 않음) — 나가서 본문을 보고
 // 돌아와 베끼지 못하게. 돌아오면 지웠다는 걸 알려준다. (채점한 뒤에는 이미 정답이 보이는 상태라 그대로 둔다)
 let memoWipedWhileAway = false;
@@ -1083,20 +1176,30 @@ function wipeMemoAnswersOnLeave(){
 
   if (wiped) memoWipedWhileAway = true;
 }
+function noticeMemoWipedOnReturn(){
+  if (!memoWipedWhileAway) return;
+  memoWipedWhileAway = false;
+  showAlertModal("다른 화면으로 나갔다 와서\n입력한 내용이 지워졌습니다.\n처음부터 다시 입력 바랍니다.");
+}
+// 나가는 순간: 폰에서 다른 앱으로 가거나 브라우저 탭을 바꾸면 visibilitychange(hidden),
+// PC에서 Alt+Tab 등으로 다른 창을 보면 페이지는 그대로 "보이는" 상태라 visibilitychange가 안 오므로 창 blur로도 잡는다
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden"){ wipeMemoAnswersOnLeave(); return; }
-  if (memoWipedWhileAway){
-    memoWipedWhileAway = false;
-    showAlertModal("다른 화면으로 나갔다 와서\n입력한 내용이 지워졌습니다.\n처음부터 다시 입력 바랍니다.");
-  }
+  if (document.visibilityState === "hidden") wipeMemoAnswersOnLeave();
+  else noticeMemoWipedOnReturn();
 });
+window.addEventListener("blur", wipeMemoAnswersOnLeave);
+window.addEventListener("focus", noticeMemoWipedOnReturn);
 window.addEventListener("pagehide", wipeMemoAnswersOnLeave);
 
 document.getElementById("btn-memo-range").addEventListener("click", openMemoRange);
 document.getElementById("btn-memo-range-back").addEventListener("click", renderMemoHome);
 document.getElementById("btn-memo-range-start").addEventListener("click", startMemoRange);
 document.getElementById("btn-memo-range-grade").addEventListener("click", gradeMemoRange);
-document.getElementById("btn-memo-range-reset").addEventListener("click", resetMemoRange);
+// 다시하기도 새 테스트라서, 채점 뒤에 전체화면을 빠져나왔다면 다시 전체화면으로 바꾼 뒤 시작한다
+document.getElementById("btn-memo-range-reset").addEventListener("click", async () => {
+  if (!memoRange || !(await enterMemoTestScreen())) return;
+  resetMemoRange();
+});
 
 /* ---------- 2단계: 한 장의 절 목록 ---------- */
 function openMemoChapter(chapter){
