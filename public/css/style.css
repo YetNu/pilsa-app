@@ -509,17 +509,19 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 #memo-verse .memo-verse-nav .btn{ min-width:64px; }
 #memo-verse #btn-memo-hide, #memo-verse #btn-memo-show{ min-width:84px; }
 #memo-verse .memo-head h3{ font-size:1rem; color: var(--ink-soft); font-weight:600; }
-/* 테스트 입력칸 글자도 본문처럼 크게 */
+/* 테스트 입력칸 글자도 본문처럼 크게 — 채점 결과 글상자도 입력칸과 같은 크기·여백·줄바꿈으로 */
 #memo-test-input{ font-size:1.2rem; line-height:2; }
+#memo-result .memo-result__text{ font-size:1.2rem; line-height:2; padding: 14px 16px; word-break: break-word; overflow-wrap: break-word; }
 .memo-result__verdict{ font-weight:600; margin: 0 0 12px; }
 .memo-result__verdict.is-correct{ color: var(--green-ink); }
 .memo-result__verdict.is-wrong{ color: var(--red-ink); }
 .memo-result__label{ font-size:.92rem; font-weight:700; color: var(--ink); margin: 14px 0 6px; } /* "내가 쓴 답" / "정답" */
 .memo-result__label small{ font-size:.75rem; font-weight:400; color: var(--ink-soft); }
 .memo-result__text{ white-space: pre-wrap; }
-.memo-result__text .is-wrong{ color: var(--red-ink); font-weight:700; background: rgba(var(--red-rgb),.14); }
+/* 틀린 글자 표시는 글자 폭을 바꾸지 않게(굵게·여백 없이) 색과 바탕으로만 — 내가 쓴 글과 위치가 어긋나지 않도록 */
+.memo-result__text .is-wrong{ color: var(--red-ink); background: rgba(var(--red-rgb),.16); border-radius:2px; }
 /* 띄어쓰기만 다른 곳 — 공백 한 칸이 주황색 칸으로 보인다 */
-.memo-result__text .is-space{ background: rgba(var(--accent-rgb),.45); border-radius:3px; padding: 0 2px; }
+.memo-result__text .is-space{ background: rgba(var(--accent-rgb),.45); border-radius:2px; }
 .memo-result__note{ font-size:.85rem; color: var(--gold); margin: -6px 0 10px; }
 
 /* 암기 테스트 — 1~22장 박스 뒤에 붙는 같은 크기·같은 색의 박스 (시험지 + 연필 아이콘) */
@@ -548,7 +550,12 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .memo-range__picker .btn{ margin-left:6px; } /* "절" 글자 바로 오른쪽에 붙게 */
 .memo-range__result{ margin-top:8px; }
 .memo-range__result .memo-result__verdict{ margin-bottom:6px; font-size:.9rem; }
-.memo-range__result .memo-result__text{ font-size:1rem; padding: 8px 12px; }
+/* 결과 글상자를 바로 위 입력칸(.verse-input-row__textarea)과 똑같이 맞춘다 — 테두리 1px + 좌우 여백 12px,
+   같은 글꼴·크기·줄간격·줄바꿈 규칙이라 내가 쓴 글과 같은 자리에서 시작하고 같은 곳에서 줄이 바뀐다 */
+.memo-range__result .memo-result__text{
+  font-family: var(--serif); font-size:16px; line-height:26px;
+  padding: 9px 12px; word-break: break-word; overflow-wrap: break-word;
+}
 .memo-range__result .memo-result__label{ margin: 10px 0 5px; }
 .verse-input-row.is-ok .memo-range__box, .verse-input-row.is-space .memo-range__box{ border-color: var(--green-ink); }
 .verse-input-row.is-wrong .memo-range__box{ border-color: var(--red-ink); }
@@ -561,6 +568,23 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .memo-chapter-text .source-row + .source-row{ margin-top:6px; }
 .memo-chapter-text .source-row__text.is-missing{ color: var(--ink-soft); font-size:.9rem; }
 .memo-head__right{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+/* "바로 테스트" 켜기/끄기 — 작은 스위치 모양 (실제 체크박스는 숨기고 옆의 스위치가 상태를 보여준다) */
+.memo-keep-test{
+  display:inline-flex; align-items:center; gap:6px; margin-right:4px;
+  font-size:.8rem; color: var(--ink-soft); cursor:pointer; user-select:none; white-space:nowrap;
+}
+.memo-keep-test input{ position:absolute; opacity:0; width:1px; height:1px; pointer-events:none; }
+.memo-keep-test__switch{
+  position:relative; width:30px; height:18px; border-radius:999px;
+  background: rgba(var(--ink-rgb),.18); transition: background .15s; flex-shrink:0;
+}
+.memo-keep-test__switch::after{
+  content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+  background:#fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s;
+}
+.memo-keep-test input:checked + .memo-keep-test__switch{ background: var(--green-ink); }
+.memo-keep-test input:checked + .memo-keep-test__switch::after{ transform: translateX(12px); }
+.memo-keep-test input:focus-visible + .memo-keep-test__switch{ outline: 2px solid var(--focus); outline-offset:2px; }
 .memo-verse-nav{ display:flex; gap:8px; } /* 이전·다음 절 버튼을 나란히 */
 .memo-verse-nav .btn{ min-width:84px; } /* 절 번호 자릿수(9절↔10절)가 바뀌어도 버튼 폭이 그대로라 위치가 안 흔들리게 */
 .memo-actions{ align-items:center; flex-wrap:wrap; }

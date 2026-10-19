@@ -526,7 +526,7 @@ function isPhoneLayout(){ return window.matchMedia(PHONE_LAYOUT_QUERY).matches; 
 // 또 한 번 움직여서 브라우저 자체 스크롤·키보드 애니메이션과 겹쳐 꿀렁거렸다)
 let revealTimer = null;
 let lastVerseBlurAt = 0; // 방금 다른 절 입력칸에 있었는지(= 키보드가 이미 올라와 있는지) 판단용
-function revealTypingRow(row, immediately){
+function revealTypingRow(row){
   if (!isPhoneLayout()) return;
   const TOP_MARGIN = 72; // 인앱 브라우저가 화면 위에 띄우는 주소창 등에 가리지 않을 만큼의 여유
   const move = () => {
@@ -547,7 +547,7 @@ function revealTypingRow(row, immediately){
   };
   clearTimeout(revealTimer);
   const keyboardAlreadyUp = Date.now() - lastVerseBlurAt < 200; // Enter 등으로 절에서 절로 바로 넘어온 경우
-  revealTimer = setTimeout(move, immediately || keyboardAlreadyUp ? 0 : 450);
+  revealTimer = setTimeout(move, keyboardAlreadyUp ? 0 : 450);
 }
 
 // PC 배치: 입력칸들은 자기 박스(#typing-area) 안에서 따로 스크롤된다. Enter로 다음 절로 넘어가거나
@@ -620,11 +620,35 @@ function renderVerseOverlay(overlayEl, typed, sourceText, finalize){
   overlayEl.innerHTML = html;
 }
 
-function autoResizeVerseInput(textarea, overlay){
+// 입력칸 높이를 글 양에 맞춘다. 높이를 재려고 잠깐 "auto"로 줄이는 순간 페이지(또는 입력 박스)가 짧아져
+// 브라우저가 스크롤 위치를 당겨버리는데, 글자 하나 칠 때마다 이게 반복되면 화면이 위아래로 출렁인다 —
+// 그래서 재기 전 스크롤 위치를 기억했다가 그대로 되돌린다. 반환: 칸이 커졌는지(true/false)
+function resizeTextareaKeepingScroll(textarea){
+  const box = document.getElementById("typing-area");
+  const pageY = window.scrollY, boxTop = box.scrollTop;
+  const before = textarea.offsetHeight;
   textarea.style.height = "auto";
-  const h = textarea.scrollHeight;
-  textarea.style.height = h + "px";
-  overlay.style.minHeight = h + "px";
+  textarea.style.height = textarea.scrollHeight + "px";
+  if (window.scrollY !== pageY) window.scrollTo(0, pageY);
+  if (box.scrollTop !== boxTop) box.scrollTop = boxTop;
+  return textarea.offsetHeight > before;
+}
+
+function autoResizeVerseInput(textarea, overlay){
+  const grew = resizeTextareaKeepingScroll(textarea);
+  overlay.style.minHeight = textarea.offsetHeight + "px";
+  return grew;
+}
+
+// 폰에서 타이핑하다 줄이 늘어 입력칸이 키보드 밑으로 내려가면, 내려간 만큼만 화면을 올린다.
+// (예전에는 글자를 칠 때마다 그 절을 화면 위쪽으로 다시 맞추려 해서, 브라우저가 커서를 따라가는
+//  스크롤과 부딪쳐 화면이 왔다 갔다 했다 — 이제는 칸이 실제로 커졌을 때만, 필요한 만큼만 움직인다)
+function keepGrowingInputVisible(textarea){
+  if (!isPhoneLayout()) return;
+  const vv = window.visualViewport;
+  const viewBottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - 10;
+  const hidden = textarea.getBoundingClientRect().bottom - viewBottom;
+  if (hidden > 0) window.scrollBy(0, hidden);
 }
 
 // 필사 입력칸을 절마다 하나씩 만든다. Enter를 누르면 다음 절 칸으로 넘어가고,
@@ -661,10 +685,11 @@ function buildTypingArea(){
 
     textarea.addEventListener("input", () => {
       renderVerseOverlay(overlay, textarea.value, v.text);
-      autoResizeVerseInput(textarea, overlay);
-      // 줄이 늘어나 칸이 커졌으면 잘리지 않게 따라간다 (폰: 화면 / PC: 입력 박스 안 스크롤)
-      revealTypingRow(row, true);
-      keepTypingRowInBox(row, false);
+      // 줄이 늘어나 칸이 커졌을 때만 잘리지 않게 따라간다 (폰: 화면 / PC: 입력 박스 안 스크롤)
+      if (autoResizeVerseInput(textarea, overlay)){
+        keepGrowingInputVisible(textarea);
+        keepTypingRowInBox(row, false);
+      }
       saveDraftVerse(openAssignment.dayIndex, v.verse, textarea.value);
     });
 
@@ -682,6 +707,14 @@ function buildTypingArea(){
     });
 
     textarea.addEventListener("keydown", e => {
+      // 빈 칸에서 Backspace를 누르면 앞 절 칸 맨 끝으로 돌아가 이어서 지울 수 있게
+      if (e.key === "Backspace" && textarea.value === "" && i > 0 && !e.isComposing){
+        e.preventDefault();
+        const prev = textareas[i - 1];
+        prev.focus();
+        prev.setSelectionRange(prev.value.length, prev.value.length);
+        return;
+      }
       if (e.key !== "Enter") return;
       e.preventDefault();
       const next = textareas[i + 1];
@@ -947,7 +980,7 @@ async function startMemoRange(){
 }
 
 // 필사 입력칸과 같은 모양("N절" + 입력칸)으로 절마다 한 줄씩. 채점 결과는 각 입력칸 바로 아래에 붙는다
-function buildMemoRangeRows(){
+function buildMemoRangeRows(focusFirst = true){
   const list = document.getElementById("memo-range-list");
   list.innerHTML = "";
   const textareas = [];
@@ -968,10 +1001,11 @@ function buildMemoRangeRows(){
     list.appendChild(row);
 
     const textarea = row.querySelector("textarea");
-    const resize = () => { textarea.style.height = "auto"; textarea.style.height = textarea.scrollHeight + "px"; };
-    resize();
+    resizeTextareaKeepingScroll(textarea);
     preventPasteOn(textarea);
-    textarea.addEventListener("input", () => { resize(); revealTypingRow(row, true); });
+    textarea.addEventListener("input", () => {
+      if (resizeTextareaKeepingScroll(textarea)) keepGrowingInputVisible(textarea);
+    });
     textarea.addEventListener("blur", () => { lastVerseBlurAt = Date.now(); });
     textarea.addEventListener("focus", () => revealTypingRow(row));
     textarea.addEventListener("keydown", e => {
@@ -984,7 +1018,7 @@ function buildMemoRangeRows(){
   });
 
   const first = textareas.find(t => !t.disabled);
-  if (first) first.focus();
+  if (first && focusFirst) first.focus();
 }
 
 function gradeMemoRange(){
@@ -1028,11 +1062,40 @@ function gradeMemoRange(){
   summary.hidden = false;
 }
 
-function resetMemoRange(){
+function resetMemoRange(focusFirst = true){
   if (!memoRange) return;
   document.getElementById("memo-range-summary").hidden = true;
-  buildMemoRangeRows();
+  buildMemoRangeRows(focusFirst);
 }
+
+// 범위 암기 테스트 중에 다른 화면(다른 앱·탭)으로 나가면 입력한 내용을 바로 지운다 (한 절 테스트는 지우지 않음) — 나가서 본문을 보고
+// 돌아와 베끼지 못하게. 돌아오면 지웠다는 걸 알려준다. (채점한 뒤에는 이미 정답이 보이는 상태라 그대로 둔다)
+let memoWipedWhileAway = false;
+function wipeMemoAnswersOnLeave(){
+  let wiped = false;
+
+  // 범위 암기 테스트 — 채점 전에 입력칸에 쓴 게 하나라도 있으면 전부 비운다
+  // (이미 채점했으면 정답이 다 보이는 상태라 결과를 그대로 둔다 — "다시하기"를 누르면 다시 지우는 대상)
+  const rangeGraded = !document.getElementById("memo-range-summary").hidden;
+  if (!document.getElementById("memo-range").hidden && memoRange && !rangeGraded){
+    const inputs = [...document.querySelectorAll("#memo-range-list .memo-range__input")];
+    if (inputs.some(t => t.value.trim())){
+      inputs.forEach(t => t.blur());
+      resetMemoRange(false); // 돌아왔을 때 키보드가 저절로 올라오지 않게 첫 칸에 커서를 두지 않는다
+      wiped = true;
+    }
+  }
+
+  if (wiped) memoWipedWhileAway = true;
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden"){ wipeMemoAnswersOnLeave(); return; }
+  if (memoWipedWhileAway){
+    memoWipedWhileAway = false;
+    showAlertModal("다른 화면으로 나갔다 와서 입력한 내용이 지워졌어요. 처음부터 다시 써 주세요.");
+  }
+});
+window.addEventListener("pagehide", wipeMemoAnswersOnLeave);
 
 document.getElementById("btn-memo-range-back").addEventListener("click", renderMemoHome);
 document.getElementById("btn-memo-range-start").addEventListener("click", startMemoRange);
@@ -1148,7 +1211,8 @@ async function getRevelationChapterText(chapter){
   return data.verses;
 }
 
-async function openMemoVerse(chapter, verse){
+// startMode: 본문을 불러온 뒤 처음 보여줄 상태 (기본은 본문 보기 — "바로 테스트"로 넘길 때는 "test")
+async function openMemoVerse(chapter, verse, startMode){
   memoChapterNum = chapter;
   updateMemoVerseNav(chapter, verse);
   const open = memoOpen = { chapter, verse, text: "" };
@@ -1176,7 +1240,7 @@ async function openMemoVerse(chapter, verse){
   }
   open.text = found.text;
   textEl.textContent = found.text;
-  setMemoMode("view");
+  setMemoMode(startMode || "view");
 }
 
 // 이전/다음 절 버튼 — 같은 장 안에서만. 없는 쪽 버튼은 자리는 그대로 두고 감춰서(visibility)
@@ -1189,15 +1253,34 @@ function updateMemoVerseNav(chapter, verse){
   prev.style.visibility = verse > 1 ? "visible" : "hidden";
   next.style.visibility = verse < last ? "visible" : "hidden";
 }
-document.getElementById("btn-memo-prev").addEventListener("click", () => {
-  if (memoOpen && memoOpen.verse > 1) openMemoVerse(memoOpen.chapter, memoOpen.verse - 1);
-});
-document.getElementById("btn-memo-next").addEventListener("click", () => {
-  if (memoOpen && memoOpen.verse < REVELATION.verses[memoOpen.chapter - 1]) openMemoVerse(memoOpen.chapter, memoOpen.verse + 1);
-});
+// "바로 테스트": 테스트 중(가리고 쓰는 중이거나 채점 결과를 보는 중)에 앞·뒤 절로 넘기면 본문을 한 번도
+// 보여주지 않고 곧바로 가린 상태로 연다. 원치 않는 사람도 있어서 켜고 끌 수 있게 하고, 선택은 기기에 저장한다 (기본: 켬)
+const MEMO_KEEP_TEST_KEY = "pilsa_memo_keep_test";
+function memoKeepTestOn(){
+  try { return localStorage.getItem(MEMO_KEEP_TEST_KEY) !== "0"; } catch { return true; }
+}
+(function initMemoKeepTest(){
+  const cb = document.getElementById("memo-keep-test");
+  cb.checked = memoKeepTestOn();
+  cb.addEventListener("change", () => {
+    try { localStorage.setItem(MEMO_KEEP_TEST_KEY, cb.checked ? "1" : "0"); } catch { /* 저장 안 되는 브라우저면 이번 방문에만 */ }
+  });
+})();
+
+function moveMemoVerse(delta){
+  if (!memoOpen) return;
+  const verse = memoOpen.verse + delta;
+  if (verse < 1 || verse > REVELATION.verses[memoOpen.chapter - 1]) return;
+  const testing = memoMode === "test" || memoMode === "result";
+  openMemoVerse(memoOpen.chapter, verse, testing && document.getElementById("memo-keep-test").checked ? "test" : "view");
+}
+document.getElementById("btn-memo-prev").addEventListener("click", () => moveMemoVerse(-1));
+document.getElementById("btn-memo-next").addEventListener("click", () => moveMemoVerse(1));
 
 // none: 본문 없음(불러오는 중/미등록) · view: 본문 보기 · test: 가리고 입력 · result: 채점 결과
+let memoMode = "none"; // 한 절 화면의 지금 상태 (setMemoMode 참고)
 function setMemoMode(mode){
+  memoMode = mode;
   const hidden = mode === "test" || mode === "result";
   document.getElementById("memo-verse-text").hidden = hidden;
   document.getElementById("memo-test").hidden = mode !== "test";

@@ -181,8 +181,13 @@
         <div class="memo-head">
           <button class="btn btn--ghost btn-back" id="btn-memo-back-chapter">‹ 절 목록</button>
           <h3 id="memo-verse-title"></h3>
-          <!-- 제목 줄 오른쪽: 앞뒤 절 이동 -->
+          <!-- 제목 줄 오른쪽: (넘길 때 바로 테스트 켜기/끄기) + 앞뒤 절 이동 -->
           <div class="memo-head__right">
+            <label class="memo-keep-test" title="테스트 중에 앞·뒤 절로 넘기면 본문을 보여주지 않고 바로 테스트로 시작해요">
+              <input type="checkbox" id="memo-keep-test">
+              <span class="memo-keep-test__switch" aria-hidden="true"></span>
+              <span>바로 테스트</span>
+            </label>
             <div class="memo-verse-nav">
               <button type="button" class="btn btn--ghost" id="btn-memo-prev">‹</button>
               <button type="button" class="btn btn--ghost" id="btn-memo-next">›</button>
