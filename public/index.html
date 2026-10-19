@@ -255,7 +255,13 @@
         </div>
 
         <div class="pilsa-panel" id="memo-range-panel" hidden>
-          <h3 id="memo-range-title"></h3>
+          <div class="memo-range__head">
+            <h3 id="memo-range-title"></h3>
+            <!-- 채점하면 제목 오른쪽에 표시 색 안내 -->
+            <span class="memo-range__legend" id="memo-range-legend" hidden>
+              <span class="memo-range__legend-red">빨강</span> = 오타, <span class="memo-range__legend-orange">주황</span> = 띄어쓰기
+            </span>
+          </div>
           <div class="verse-input-list" id="memo-range-list"></div>
           <p class="memo-range__summary" id="memo-range-summary" hidden></p>
           <div class="pilsa-panel__actions">

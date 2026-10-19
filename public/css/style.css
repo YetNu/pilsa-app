@@ -553,11 +553,36 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 }
 .memo-range__picker .btn{ margin-left:6px; } /* "절" 글자 바로 오른쪽에 붙게 */
 .memo-range__result{ margin-top:0; }
+.memo-range__head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:.4em; }
+.memo-range__head h3{ margin:0; }
+.memo-range__legend{ font-size:.8rem; color: var(--ink-soft); white-space:nowrap; }
+.memo-range__legend-red{ color: var(--red-ink); background: rgba(var(--red-rgb),.16); border-radius:2px; padding:0 3px; font-weight:600; }
+.memo-range__legend-orange{ color: var(--gold); background: rgba(var(--accent-rgb),.25); border-radius:2px; padding:0 3px; font-weight:600; }
+@media (max-width: 480px){ /* 폰에서도 제목과 색 안내가 한 줄에 들어가게 조금 작게 */
+  .memo-range__head h3{ font-size:1rem; }
+  .memo-range__legend{ font-size:.68rem; }
+  .memo-range__legend-red, .memo-range__legend-orange{ padding:0 2px; }
+}
+/* 채점 후 "N절" 아래 ⭕/❌ */
+/* 채점 후 "N절" 글자 위에 선생님 채점처럼 빨간 펜으로 표시 — 맞으면 동그라미, 틀리면 엑스.
+   이모지는 속이 꽉 차서 번호가 안 보이므로, 테두리·선만 있는 도형을 CSS로 그려 번호가 비쳐 보이게 한다 */
+.memo-range__numlabel{ position:relative; display:inline-block; }
+.memo-range__mark{
+  position:absolute; left:50%; top:50%; width:32px; height:32px;
+  transform: translate(-50%, -50%); pointer-events:none; opacity:.85;
+}
+.memo-range__mark.is-pass{ border:2.5px solid var(--red-ink); border-radius:50%; }
+.memo-range__mark.is-fail::before, .memo-range__mark.is-fail::after{
+  content:""; position:absolute; left:50%; top:50%; width:34px; height:2.5px;
+  background: var(--red-ink); border-radius:2px;
+}
+.memo-range__mark.is-fail::before{ transform: translate(-50%, -50%) rotate(45deg); }
+.memo-range__mark.is-fail::after{ transform: translate(-50%, -50%) rotate(-45deg); }
 /* 채점 후 입력칸 자리에 들어가는 "내가 쓴 답" — 입력칸과 같은 테두리, 판정에 따라 초록/빨강 */
 .memo-range__result .memo-range__typed{ margin-bottom:8px; }
 .verse-input-row.is-ok .memo-range__typed, .verse-input-row.is-space .memo-range__typed{ border-color: var(--green-ink); }
 .verse-input-row.is-wrong .memo-range__typed{ border-color: var(--red-ink); }
-.memo-range__typed.is-empty{ color: var(--ink-soft); }
+.memo-range__typed.is-empty{ min-height: calc(26px + 18px + 2px); } /* 빈 답도 입력칸과 같은 높이의 빈 상자로 */
 .memo-range__result .memo-result__verdict{ margin-bottom:6px; font-size:.9rem; }
 /* 결과 글상자를 바로 위 입력칸(.verse-input-row__textarea)과 똑같이 맞춘다 — 테두리 1px + 좌우 여백 12px,
    같은 글꼴·크기·줄간격·줄바꿈 규칙이라 내가 쓴 글과 같은 자리에서 시작하고 같은 곳에서 줄이 바뀐다 */
@@ -571,7 +596,8 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 /* 테스트 입력칸은 오타 색 겹침(overlay) 없이 글자를 그대로 보여준다 (외워서 쓰는 거라 실시간 정답 표시는 안 함) */
 .memo-range__input{ color: var(--ink); }
 .memo-range__input:disabled{ background: rgba(var(--ink-rgb),.04); cursor:not-allowed; }
-.memo-range__summary{ font-size:.95rem; margin: 14px 0 0; }
+/* 요약 줄은 정답·답 상자와 같은 왼쪽 선에서 시작 ("N절" 칸 40px + 간격 10px) */
+.memo-range__summary{ font-size:.95rem; margin: 14px 0 0; padding-left:50px; }
 
 .memo-chapter-text{ user-select:none; -webkit-user-select:none; }
 .memo-chapter-text .source-row + .source-row{ margin-top:6px; }
@@ -668,6 +694,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   .verse-input-list{ gap:18px; }
   .verse-input-row{ gap:6px; }
   .verse-input-row__num{ width:30px; padding-top:7px; font-size:.78rem; }
+  .memo-range__summary{ padding-left:36px; } /* 폰 배치: "N절" 칸 30px + 간격 6px */
   .verse-input-row__source{
     display:block;
     font-family: var(--serif); font-size:16px; line-height:26px;

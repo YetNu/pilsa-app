@@ -947,6 +947,7 @@ async function startMemoRange(){
 
   document.getElementById("memo-range-title").textContent = `${REVELATION.book} ${chapter}장 ${from}~${to}절`;
   document.getElementById("memo-range-summary").hidden = true;
+  document.getElementById("memo-range-legend").hidden = true;
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   panel.hidden = false;
   btn.disabled = true;
@@ -1012,8 +1013,8 @@ function gradeMemoRange(){
   const rows = [...document.querySelectorAll("#memo-range-list .verse-input-row")];
   const counts = { ok: 0, space: 0, wrong: 0, skipped: 0 };
 
-  // 채점하면 입력칸을 감추고, 그 자리에 내가 쓴 답(틀린 곳 표시)을 바로 보여준다 — 그 아래 판정과 정답.
-  // 다시 쓰려면 "다시하기" (입력칸이 새로 만들어진다)
+  // 채점하면 입력칸을 감추고, 그 자리에 내가 쓴 답(틀린 곳 표시)을 바로 보여준다. 맞았는지는 왼쪽 "N절" 아래
+  // ⭕/❌ 로만 표시하고, 틀렸거나 띄어쓰기가 다르면 그 아래에 정답. 다시 쓰려면 "다시하기" (입력칸이 새로 만들어진다)
   memoRange.verses.forEach((v, i) => {
     const row = rows[i];
     const input = row.querySelector("textarea");
@@ -1023,13 +1024,17 @@ function gradeMemoRange(){
     if (v.text === null){ counts.skipped++; resultEl.hidden = true; return; }
     input.blur();
     box.hidden = true;
+    const markNum = pass => {
+      row.querySelector(".verse-input-row__num").innerHTML =
+        `<span class="memo-range__numlabel">${v.verse}절<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span>`;
+    };
+    const answer = html => `<div class="memo-result__label">정답</div><div class="memo-result__text">${html}</div>`;
 
     if (!normalizeVerseText(input.value)){
       counts.wrong++;
       row.classList.add("is-wrong");
-      resultEl.innerHTML = `<div class="memo-result__text memo-range__typed is-empty">(입력하지 않았어요)</div>
-        <p class="memo-result__verdict is-wrong">❌ 입력하지 않았어요</p>
-        <div class="memo-result__label">정답</div><div class="memo-result__text">${escapeHtml(normalizeVerseText(v.text))}</div>`;
+      markNum(false);
+      resultEl.innerHTML = `<div class="memo-result__text memo-range__typed is-empty"></div>${answer(escapeHtml(normalizeVerseText(v.text)))}`;
       resultEl.hidden = false;
       return;
     }
@@ -1037,25 +1042,23 @@ function gradeMemoRange(){
     const g = gradeMemoAnswer(input.value, v.text);
     counts[g.status]++;
     row.classList.add(`is-${g.status}`);
+    markNum(g.status !== "wrong");
     const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
-    resultEl.innerHTML =
-      g.status === "ok" ? `${typed}<p class="memo-result__verdict is-correct">⭕ 정확해요</p>`
-      : g.status === "space" ? `${typed}<p class="memo-result__verdict is-correct">⭕ 통과 — 띄어쓰기만 원문과 달라요 (주황색)</p>
-          <div class="memo-result__label">정답</div><div class="memo-result__text">${g.sourceHTML}</div>`
-      : `${typed}<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요 (빨강 = 글자, 주황 = 띄어쓰기)</p>
-          <div class="memo-result__label">정답</div><div class="memo-result__text">${g.sourceHTML}</div>`;
+    resultEl.innerHTML = g.status === "ok" ? typed : typed + answer(g.sourceHTML);
     resultEl.hidden = false;
   });
+  document.getElementById("memo-range-legend").hidden = false;
 
   const graded = counts.ok + counts.space + counts.wrong;
   const summary = document.getElementById("memo-range-summary");
-  summary.innerHTML = `${graded}개 절 중 <b>⭕ ${counts.ok + counts.space}개 통과</b> · <b>❌ ${counts.wrong}개</b>${counts.skipped ? ` · 본문 미등록 ${counts.skipped}개` : ""}`;
+  summary.innerHTML = `${graded}개 절 중 <b>⭕ ${counts.ok + counts.space}개</b> · <b>❌ ${counts.wrong}개</b>${counts.skipped ? ` · 본문 미등록 ${counts.skipped}개` : ""}`;
   summary.hidden = false;
 }
 
 function resetMemoRange(focusFirst = true){
   if (!memoRange) return;
   document.getElementById("memo-range-summary").hidden = true;
+  document.getElementById("memo-range-legend").hidden = true;
   buildMemoRangeRows(focusFirst);
 }
 
