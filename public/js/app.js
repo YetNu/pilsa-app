@@ -1028,7 +1028,8 @@ function gradeMemoRange(){
       row.querySelector(".verse-input-row__num").innerHTML =
         `<span class="memo-range__numlabel">${v.verse}절<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span>`;
     };
-    const answer = html => `<div class="memo-result__label">정답</div><div class="memo-result__text">${html}</div>`;
+    // 정답 상자 — "정답" 글자는 위가 아니라 왼쪽 "N절" 칸 자리에 (style.css .memo-range__answer 참고)
+    const answer = html => `<div class="memo-range__answer"><span class="memo-range__answer-label">정답</span><div class="memo-result__text">${html}</div></div>`;
 
     if (!normalizeVerseText(input.value)){
       counts.wrong++;

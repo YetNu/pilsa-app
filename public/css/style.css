@@ -553,6 +553,12 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 }
 .memo-range__picker .btn{ margin-left:6px; } /* "절" 글자 바로 오른쪽에 붙게 */
 .memo-range__result{ margin-top:0; }
+/* 정답 상자의 "정답" 글자는 바로 위 "N절"과 같은 왼쪽 칸에 (칸 40px + 간격 10px 만큼 왼쪽으로 빼서, 같은 높이) */
+.memo-range__answer{ position:relative; }
+.memo-range__answer-label{
+  position:absolute; right:calc(100% + 10px); top:0; width:40px; padding-top:11px;
+  text-align:right; font-size:.85rem; font-weight:700; color: var(--ink); white-space:nowrap;
+}
 .memo-range__head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:.4em; }
 .memo-range__head h3{ margin:0; }
 .memo-range__legend{ font-size:.8rem; color: var(--ink-soft); white-space:nowrap; }
@@ -695,6 +701,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   .verse-input-row{ gap:6px; }
   .verse-input-row__num{ width:30px; padding-top:7px; font-size:.78rem; }
   .memo-range__summary{ padding-left:36px; } /* 폰 배치: "N절" 칸 30px + 간격 6px */
+  .memo-range__answer-label{ right:calc(100% + 6px); width:30px; padding-top:13px; font-size:.78rem; }
   .verse-input-row__source{
     display:block;
     font-family: var(--serif); font-size:16px; line-height:26px;
