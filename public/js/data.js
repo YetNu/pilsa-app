@@ -134,11 +134,25 @@ function isWeekend(dateStr){
   return dow === 0 || dow === 6;
 }
 
-/* 암기 시작일부터 평일마다 한 절씩(주 5절) 순서대로 배정했을 때, 그 날짜에 외울 절.
-   주말·시작일 이전·전체를 다 마친 뒤에는 null. 시작일이 주말이면 다음 월요일부터 시작한다. */
+/* 암기는 처음에 평일(월~금)마다 한 절씩(주 5절)이었고, 2026-10-25(일)부터는 매일(일~토) 한 절씩이다.
+   이미 지난 배정이 바뀌지 않도록, 전환일 전 날짜는 예전처럼 평일만 세고 전환일부터는 매일 센다.
+   (암기 시작일 자체가 전환일 이후면 처음부터 매일 센다) */
+const MEMO_DAILY_FROM = "2026-10-25";
+
+/* 암기 시작일부터 순서대로 배정했을 때, 그 날짜에 외울 절.
+   시작일 이전·(평일 기간의) 주말·전체를 다 마친 뒤에는 null. 평일 기간에 시작일이 주말이면 다음 월요일부터. */
 function getMemoVerseForDate(dateStr, startDate, startChapter){
-  if (!startDate || dateStr < startDate || isWeekend(dateStr)) return null;
-  const index = weekdaySerial(dateStr) - weekdaySerial(startDate);
+  if (!startDate || dateStr < startDate) return null;
+  let index;
+  if (startDate >= MEMO_DAILY_FROM){
+    index = daysBetween(startDate, dateStr);                       // 처음부터 매일
+  } else if (dateStr < MEMO_DAILY_FROM){
+    if (isWeekend(dateStr)) return null;                           // 평일 기간
+    index = weekdaySerial(dateStr) - weekdaySerial(startDate);
+  } else {
+    // 전환일까지 평일로 외운 절 수(= 전환일에 외울 절의 순번)부터 매일 하나씩
+    index = (weekdaySerial(MEMO_DAILY_FROM) - weekdaySerial(startDate)) + daysBetween(MEMO_DAILY_FROM, dateStr);
+  }
   if (index >= REVELATION_SEQUENCE.length) return null;
   // 1장이 아닌 장부터 시작하면(기본 9장) 22장까지 간 뒤 1장으로 돌아와 시작 장 직전까지 — 그래야 전장을 다 돈다
   const offset = REVELATION_SEQUENCE.findIndex(v => v.chapter === (startChapter || MEMO_DEFAULT_START_CHAPTER));
@@ -192,7 +206,7 @@ if (typeof module !== "undefined" && module.exports) {
     getAssignmentForDayIndex, formatAssignmentLabel,
     PILSA_WEEKDAY_ONLY_FROM, dateToDayIndex, dayIndexToDate, countAssignedBefore,
     REVELATION, REVELATION_TOTAL_VERSES, CONTENT_BOOKS, isValidRevelationVerse,
-    REVELATION_SEQUENCE, MEMO_DEFAULT_START_CHAPTER, getMemoVerseForDate,
+    REVELATION_SEQUENCE, MEMO_DEFAULT_START_CHAPTER, MEMO_DAILY_FROM, getMemoVerseForDate,
     toISODate, addDays, normalizeVerseText,
   };
 }

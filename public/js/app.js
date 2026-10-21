@@ -779,7 +779,7 @@ function memoKey(chapter, verse){ return `${chapter}:${verse}`; }
 function memoChecksOf(name){ return new Set((memoData && memoData.checks[name]) || []); }
 
 // 그 주의 일~토 날짜와 요일별 배정 절(주말처럼 배정 없는 날은 null).
-// 배정은 따로 저장하지 않고, 관리자가 정한 암기 시작일부터 평일마다 한 절씩 순서대로 계산한다
+// 배정은 따로 저장하지 않고, 관리자가 정한 암기 시작일부터 한 절씩 순서대로 계산한다 (data.js getMemoVerseForDate)
 function getMemoWeek(offset){
   const dates = getWeekDates(offset);
   const { startDate, startChapter } = memoData || {};
@@ -1557,7 +1557,7 @@ document.getElementById("memo-status-week-prev").addEventListener("click", () =>
 document.getElementById("memo-status-week-next").addEventListener("click", () => { memoStatusWeekOffset++; renderMemoStatusWeek(); });
 
 /* ---------- 관리자: 암기 배정 ---------- */
-// 시작일(과 시작 장)만 정하면 그날부터 평일(월~금)마다 시작 장 1절부터 한 절씩 자동으로 배정된다
+// 시작일(과 시작 장)만 정하면 그날부터 시작 장 1절부터 한 절씩 자동으로 배정된다 (평일만 → 10-25부터 매일)
 async function loadAdminMemoPlan(){
   const statusEl = document.getElementById("memoplan-status");
   statusEl.textContent = "불러오는 중…";
@@ -1575,7 +1575,7 @@ function renderMemoPlanPreview(startDate, startChapter){
   const el = document.getElementById("memoplan-preview");
   if (!startDate){ el.innerHTML = ""; return; }
 
-  // 시작일이 주말이면 다음 월요일이 실제 첫날. 마지막 날은 계산식 대신 실제 배정을 따라가며 찾는다
+  // 첫날(평일 기간에 시작일이 주말이면 다음 월요일). 마지막 날은 계산식 대신 실제 배정을 따라가며 찾는다
   let first = startDate;
   while (!getMemoVerseForDate(first, startDate, startChapter)) first = addDays(first, 1);
   let last = first;
@@ -1585,20 +1585,23 @@ function renderMemoPlanPreview(startDate, startChapter){
   }
   const label = date => { const v = getMemoVerseForDate(date, startDate, startChapter); return `${v.chapter}장 ${v.verse}절`; };
 
-  const monday = addDays(first, 1 - new Date(first + "T00:00:00").getDay());
+  // 이번 주(시작 전이면 시작하는 주)부터 2주, 일~토 7칸 — 평일만 하던 기간은 주말이 "-", 매일 기간은 7칸 모두 채워진다
+  const thisSunday = toISODate(startOfWeek(new Date()));
+  const firstSunday = addDays(first, -new Date(first + "T00:00:00").getDay());
+  const fromSunday = firstSunday > thisSunday ? firstSunday : thisSunday;
   const rows = [0, 1].map(week => {
-    const cells = MEMO_WEEKDAYS.map((_, i) => {
-      const v = getMemoVerseForDate(addDays(monday, week * 7 + i), startDate, startChapter);
+    const cells = MEMO_DAY_LABELS.map((_, i) => {
+      const v = getMemoVerseForDate(addDays(fromSunday, week * 7 + i), startDate, startChapter);
       return `<td>${v ? `${v.chapter}:${v.verse}` : "-"}</td>`;
     }).join("");
-    return `<tr><td>${addDays(monday, week * 7).slice(5)}~</td>${cells}</tr>`;
+    return `<tr><td>${addDays(fromSunday, week * 7).slice(5)}~</td>${cells}</tr>`;
   }).join("");
 
   el.innerHTML = `
     <table class="week-table" style="margin-top:14px;">
-      <tr><th>주</th>${MEMO_WEEKDAYS.map(d => `<th>${d}</th>`).join("")}</tr>${rows}
+      <tr><th>주</th>${MEMO_DAY_LABELS.map(d => `<th>${d}</th>`).join("")}</tr>${rows}
     </table>
-    <p class="form-note">최초 2주 미리보기입니다. 총 ${REVELATION_SEQUENCE.length}절 — ${first}에 ${label(first)}로 시작해 ${last}에 ${label(last)}로 끝나요.</p>`;
+    <p class="form-note">앞으로 2주 미리보기입니다. 총 ${REVELATION_SEQUENCE.length}절 — ${first}에 ${label(first)}로 시작해 ${last}에 ${label(last)}로 끝나요.</p>`;
 }
 
 document.getElementById("btn-memoplan-save").addEventListener("click", async () => {

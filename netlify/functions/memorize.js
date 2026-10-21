@@ -7,7 +7,7 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 //        (날짜별 배정 절/주간 진행률/현황 계산은 클라이언트(data.js)가 이 원본 데이터로 처리한다)
 // POST { action: "check", chapter, verse, done }      → 본인의 암기 완료 체크/해제
 // POST { action: "setStartDate", startDate, startChapter } → 관리자 전용, 암기 시작일/시작 장 설정
-//        (시작일부터 평일마다 시작 장 1절부터 한 절씩 자동 배정된다)
+//        (시작일부터 시작 장 1절부터 한 절씩 자동 배정된다 — 2026-10-25부터는 매일)
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "GET"){

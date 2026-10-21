@@ -158,7 +158,7 @@ async function getConfig(){
     start_date: startDateRow ? startDateRow[1] : "",
     // 관리자가 정한, 미리 입력을 허용하는 마지막 날짜. 비어있으면 클라이언트가 기본값(이번 주 토요일까지)을 적용한다
     open_until: openUntilRow ? openUntilRow[1] : "",
-    // 계시록 암기 시작일/시작 장 — 이 날부터 평일마다 시작 장 1절부터 한 절씩 자동 배정된다
+    // 계시록 암기 시작일/시작 장 — 이 날부터 시작 장 1절부터 한 절씩 자동 배정된다 (data.js getMemoVerseForDate)
     memo_start_date: memoStartRow ? memoStartRow[1] : "",
     memo_start_chapter: memoChapterRow ? memoChapterRow[1] : "",
   };
