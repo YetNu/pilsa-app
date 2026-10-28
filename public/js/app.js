@@ -848,9 +848,8 @@ async function renderMemo(){
 function renderMemoHome(){
   leaveMemoTestScreen();
   showMemoSection("home");
-  const reviewer = isMemoReviewer();
-  document.getElementById("btn-memo-review-label").textContent = reviewer ? "채점 보기" : "시험 결과";
-  document.getElementById("btn-memo-review").hidden = !(reviewer || (memoData.myTests || []).length);
+  // 시험 결과 — 채점자는 늘, 그 외는 낸 시험이 하나라도 있을 때
+  document.getElementById("btn-memo-review").hidden = !(isMemoReviewer() || (memoData.myTests || []).length);
   // 채점자가 있으면 "암기 시험", 없으면 "암기 테스트"
   const testName = memoReviewOn() ? "암기 시험" : "암기 테스트";
   document.getElementById("btn-memo-range-label").textContent = testName;
@@ -1265,7 +1264,7 @@ document.getElementById("btn-memo-range-grade").addEventListener("click", async 
   if (await showConfirmModal("정말 채점할까요?", "채점")) gradeMemoRange();
 });
 
-// 채점자에게 보내기: 결과는 보여주지 않고 쓴 답만 제출한다. 제출하면 테스트 화면을 닫고 채점 보기(내 기록) 화면으로 옮긴 뒤 "제출 완료!"를 크게 띄운다
+// 채점자에게 보내기: 결과는 보여주지 않고 쓴 답만 제출한다. 제출하면 테스트 화면을 닫고 시험 결과 화면으로 옮긴 뒤 "제출 완료!"를 크게 띄운다
 async function submitMemoRange(){
   if (!memoRange) return;
   const btn = document.getElementById("btn-memo-range-grade");
@@ -1298,7 +1297,7 @@ function closeDoneModal(){
 document.getElementById("btn-close-done").addEventListener("click", closeDoneModal);
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDoneModal(); });
 
-/* ---------- 채점 보기 (채점자 전용) ---------- */
+/* ---------- 시험 결과 (채점자: 모든 사람 / 그 외: 내 시험) ---------- */
 let memoReviewTests = [];
 let memoReviewMode = "all"; // all: 채점자가 모든 사람의 테스트를 봄 / mine: 내 시험 결과
 async function openMemoReview(){
@@ -1307,7 +1306,7 @@ async function openMemoReview(){
   document.getElementById("memo-review-detail").hidden = true;
   document.getElementById("btn-memo-review-refresh").hidden = false;
   document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
-  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? "채점 보기" : "시험 결과";
+  document.getElementById("memo-review-title").textContent = "시험 결과";
   const list = document.getElementById("memo-review-list");
   list.hidden = false;
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
@@ -1431,7 +1430,7 @@ document.getElementById("btn-memo-send-result").addEventListener("click", async 
     await api("/memorize", { method: "POST", body: { action: "sendResult", name: t.name, at: t.at } });
     t.sent = new Date().toISOString();
     btn.textContent = "결과 보냄 ✓";
-    // 보내고 나면 채점 보기 목록으로 돌아간다 (새로 불러와서 "결과 보냄" 표시까지)
+    // 보내고 나면 시험 결과 목록으로 돌아간다 (새로 불러와서 "결과 보냄" 표시까지)
     await openMemoReview();
   } catch (err) {
     btn.disabled = false;
@@ -1442,7 +1441,7 @@ document.getElementById("btn-memo-review-back").addEventListener("click", () => 
   if (!document.getElementById("memo-review-detail").hidden){
     document.getElementById("memo-review-detail").hidden = true;
     document.getElementById("memo-review-list").hidden = false;
-    document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? "채점 보기" : "시험 결과";
+    document.getElementById("memo-review-title").textContent = "시험 결과";
     document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
     return;
   }

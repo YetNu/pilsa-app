@@ -175,13 +175,13 @@
             </svg>
             <span class="memo-test-box__label" id="btn-memo-range-label">암기 테스트</span>
           </button>
-          <!-- 채점자: "채점 보기"(모든 사람) / 그 외: "시험 결과"(내 기록, 하나라도 있을 때) -->
-          <button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-review" title="채점 보기" hidden>
+          <!-- 시험 결과 — 채점자: 모든 사람의 시험 / 그 외: 내 시험(하나라도 있을 때) -->
+          <button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-review" title="시험 결과" hidden>
             <svg class="memo-test-box__icon" viewBox="0 0 48 48" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <rect x="8" y="6" width="28" height="36" rx="3" fill="var(--card)"/>
               <path d="M14 16l3 3 6-6M14 30l7 7M21 30l-7 7M27 16h5M27 33h5"/>
             </svg>
-            <span class="memo-test-box__label" id="btn-memo-review-label">채점 보기</span>
+            <span class="memo-test-box__label" id="btn-memo-review-label">시험 결과</span>
           </button>
         </div>
         <div class="memo-grid" id="memo-chapter-grid">
@@ -244,11 +244,11 @@
 
       </div>
 
-      <!-- 채점 보기(채점자: 모든 사람) / 시험 결과(나): 범위 암기 테스트 기록을 채점된 모습으로 -->
+      <!-- 시험 결과(채점자: 모든 사람 / 그 외: 나): 범위 암기 테스트 기록을 채점된 모습으로 -->
       <div id="memo-review" hidden>
         <div class="memo-head">
           <button class="btn btn--ghost btn-back" id="btn-memo-review-back">‹ 전체 장</button>
-          <h3 id="memo-review-title">채점 보기</h3>
+          <h3 id="memo-review-title">시험 결과</h3>
           <!-- 새로 들어온 기록을 다시 불러온다 (목록에서만 보임) -->
           <button type="button" class="memo-review-refresh" id="btn-memo-review-refresh" aria-label="새로고침" title="새로고침">↻</button>
         </div>
@@ -380,7 +380,7 @@
           <label class="memoplan-reviewer">채점자
             <select id="memo-reviewer"></select>
           </label>
-          <p class="form-note">켜 두면 범위 암기 테스트를 친 사람은 채점 결과를 보지 않고 "제출"만 하고, 지정한 채점자가 "계시록 암기 → 채점 보기"에서 모든 사람의 채점 결과를 봐요. 끄면 각자 자기 채점 결과를 봐요.</p>
+          <p class="form-note">켜 두면 범위 암기 테스트를 친 사람은 채점 결과를 보지 않고 "제출"만 하고, 지정한 채점자가 "계시록 암기 → 시험 결과"에서 모든 사람의 채점 결과를 봐요. 끄면 각자 자기 채점 결과를 봐요.</p>
           <p class="form-note" id="memo-review-status"></p>
         </div>
       </div>
