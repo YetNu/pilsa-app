@@ -851,6 +851,11 @@ function renderMemoHome(){
   const reviewer = isMemoReviewer();
   document.getElementById("btn-memo-review-label").textContent = reviewer ? "채점 보기" : "시험 결과";
   document.getElementById("btn-memo-review").hidden = !(reviewer || (memoData.myTests || []).length);
+  // 채점자가 있으면 "암기 시험", 없으면 "암기 테스트"
+  const testName = memoReviewOn() ? "암기 시험" : "암기 테스트";
+  document.getElementById("btn-memo-range-label").textContent = testName;
+  document.getElementById("btn-memo-range").title = testName;
+  document.getElementById("memo-range-title").textContent = testName;
   renderMemoWeekBox();
 
   const mine = memoChecksOf(getCurrentUser().name);

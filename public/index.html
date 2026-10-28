@@ -173,7 +173,7 @@
                 <path d="M33 15l5 5"/>
               </g>
             </svg>
-            <span class="memo-test-box__label">암기 테스트</span>
+            <span class="memo-test-box__label" id="btn-memo-range-label">암기 테스트</span>
           </button>
           <!-- 채점자: "채점 보기"(모든 사람) / 그 외: "시험 결과"(내 기록, 하나라도 있을 때) -->
           <button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-review" title="채점 보기" hidden>
@@ -272,7 +272,7 @@
       <div id="memo-range" hidden>
         <div class="memo-head">
           <button class="btn btn--ghost btn-back" id="btn-memo-range-back">‹ 전체 장</button>
-          <h3>암기 테스트</h3>
+          <h3 id="memo-range-title">암기 테스트</h3>
         </div>
 
         <div class="week-box memo-range__picker">
