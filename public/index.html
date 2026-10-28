@@ -175,6 +175,14 @@
             </svg>
             <span class="memo-test-box__label">암기 테스트</span>
           </button>
+          <!-- 채점자: "채점 보기"(모든 사람) / 그 외: "시험 결과"(내 기록, 하나라도 있을 때) -->
+          <button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-review" title="채점 보기" hidden>
+            <svg class="memo-test-box__icon" viewBox="0 0 48 48" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="8" y="6" width="28" height="36" rx="3" fill="var(--card)"/>
+              <path d="M14 16l3 3 6-6M14 30l7 7M21 30l-7 7M27 16h5M27 33h5"/>
+            </svg>
+            <span class="memo-test-box__label" id="btn-memo-review-label">채점 보기</span>
+          </button>
         </div>
         <div class="memo-grid" id="memo-chapter-grid">
           <!-- JS로 1~22장 박스가 채워짐 -->
@@ -236,6 +244,30 @@
 
       </div>
 
+      <!-- 채점 보기(채점자: 모든 사람) / 시험 결과(나): 범위 암기 테스트 기록을 채점된 모습으로 -->
+      <div id="memo-review" hidden>
+        <div class="memo-head">
+          <button class="btn btn--ghost btn-back" id="btn-memo-review-back">‹ 전체 장</button>
+          <h3 id="memo-review-title">채점 보기</h3>
+          <!-- 새로 들어온 기록을 다시 불러온다 (목록에서만 보임) -->
+          <button type="button" class="memo-review-refresh" id="btn-memo-review-refresh" aria-label="새로고침" title="새로고침">↻</button>
+        </div>
+        <div id="memo-review-list"></div>
+        <div class="pilsa-panel" id="memo-review-detail" hidden>
+          <div class="memo-range__head">
+            <h3 id="memo-review-detail-title"></h3>
+            <span class="memo-range__legend">
+              <span class="memo-range__legend-red">빨강</span> = 오타, <span class="memo-range__legend-orange">주황</span> = 띄어쓰기
+            </span>
+          </div>
+          <div class="verse-input-list" id="memo-review-rows"></div>
+          <p class="memo-range__summary" id="memo-review-summary"></p>
+          <div class="pilsa-panel__actions">
+            <button type="button" class="btn btn--primary" id="btn-memo-send-result">결과 보내기</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 암기 테스트: 장과 절 범위를 골라, 필사하듯 절마다 입력칸에 외운 대로 쓰고 한꺼번에 채점 -->
       <div id="memo-range" hidden>
         <div class="memo-head">
@@ -265,7 +297,7 @@
           <div class="verse-input-list" id="memo-range-list"></div>
           <p class="memo-range__summary" id="memo-range-summary" hidden></p>
           <div class="pilsa-panel__actions">
-            <button type="button" class="btn btn--ghost" id="btn-memo-range-reset">다시하기</button>
+            <!-- 한 버튼이 상황에 따라 채점하기 / 제출하기 / 다시하기 -->
             <button type="button" class="btn btn--primary" id="btn-memo-range-grade">채점하기</button>
           </div>
         </div>
@@ -277,15 +309,14 @@
       <h2 class="view-title">관리자</h2>
 
       <div class="tabs">
-        <button class="tabs__btn is-active" data-admin-tab="pending">승인 대기</button>
-        <button class="tabs__btn" data-admin-tab="members">전체 회원</button>
+        <button class="tabs__btn is-active" data-admin-tab="members">전체 회원</button>
         <button class="tabs__btn" data-admin-tab="assign">성경 장 배정</button>
         <button class="tabs__btn" data-admin-tab="content">본문 입력</button>
         <button class="tabs__btn" data-admin-tab="memoplan">암기 배정</button>
       </div>
 
-      <div class="admin-panel" id="admin-pending"></div>
-      <div class="admin-panel" id="admin-members" hidden></div>
+      <!-- 전체 회원 (승인 대기 중인 새 가입자는 목록 맨 아래에서 바로 승인/거절) -->
+      <div class="admin-panel" id="admin-members"></div>
       <div class="admin-panel" id="admin-assign" hidden>
         <label>시작일
           <input type="date" id="assign-start-date">
@@ -327,6 +358,31 @@
         <p class="form-note" id="memoplan-status"></p>
         <p class="form-note">시작일부터 시작 장 1절부터 한 절씩 자동 배정됩니다 (2026-10-24까지는 평일만, 10-25부터는 매일). 22장까지 마치면 1장으로 돌아가 시작 장 앞까지 이어져요.</p>
         <div id="memoplan-preview"></div>
+
+        <!-- 범위 암기 테스트 보호 켜기/끄기 (모든 회원에게 적용) -->
+        <div class="memoplan-strict">
+          <label class="memo-keep-test">
+            <input type="checkbox" id="memo-strict">
+            <span class="memo-keep-test__switch" aria-hidden="true"></span>
+            <span>암기 테스트 보호</span>
+          </label>
+          <p class="form-note">켜 두면 범위 암기 테스트를 전체화면에서만 볼 수 있고, 다른 화면(앱·창)에 다녀오거나 분할 화면으로 바꾸면 채점 전에 쓴 답이 지워져요.</p>
+          <p class="form-note" id="memo-strict-status"></p>
+        </div>
+
+        <!-- 범위 암기 테스트를 채점자 한 명에게 보내기 -->
+        <div class="memoplan-strict">
+          <label class="memo-keep-test">
+            <input type="checkbox" id="memo-review-on">
+            <span class="memo-keep-test__switch" aria-hidden="true"></span>
+            <span>채점자에게 보내기</span>
+          </label>
+          <label class="memoplan-reviewer">채점자
+            <select id="memo-reviewer"></select>
+          </label>
+          <p class="form-note">켜 두면 범위 암기 테스트를 친 사람은 채점 결과를 보지 않고 "제출"만 하고, 지정한 채점자가 "계시록 암기 → 채점 보기"에서 모든 사람의 채점 결과를 봐요. 끄면 각자 자기 채점 결과를 봐요.</p>
+          <p class="form-note" id="memo-review-status"></p>
+        </div>
       </div>
     </section>
 
@@ -356,6 +412,25 @@
       <button type="button" class="modal-close" id="btn-close-chapter-text" aria-label="닫기">✕</button>
       <h2 id="chapter-text-title" class="modal-box__title"></h2>
       <div class="memo-chapter-text" id="chapter-text-body"></div>
+    </div>
+  </div>
+
+  <!-- ============ 확인 모달 ("정말 제출할까요?" 등) ============ -->
+  <div class="modal-overlay" id="confirm-modal" hidden>
+    <div class="modal-box modal-box--alert" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-message">
+      <p id="confirm-modal-message" class="modal-box__message"></p>
+      <div class="modal-box__actions">
+        <button type="button" class="btn btn--ghost" id="btn-confirm-cancel">취소</button>
+        <button type="button" class="btn btn--primary" id="btn-confirm-ok">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 제출 완료 ============ -->
+  <div class="modal-overlay" id="done-modal" hidden>
+    <div class="modal-box modal-box--done" role="dialog" aria-modal="true" aria-labelledby="done-modal-message">
+      <button type="button" class="modal-close" id="btn-close-done" aria-label="닫기">✕</button>
+      <p id="done-modal-message" class="modal-box__done">제출 완료!</p>
     </div>
   </div>
 

@@ -99,6 +99,29 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && !document.getElementById("alert-modal").hidden) closeAlertModal();
 });
 
+/* ---------- 확인 모달 ("정말 …할까요?") — 확인을 누르면 true, 취소/바깥/Esc면 false ---------- */
+function showConfirmModal(message, okLabel = "확인"){
+  const modal = document.getElementById("confirm-modal");
+  document.getElementById("confirm-modal-message").textContent = message;
+  document.getElementById("btn-confirm-ok").textContent = okLabel;
+  modal.hidden = false;
+  return new Promise(resolve => {
+    const close = result => {
+      modal.hidden = true;
+      okBtn.removeEventListener("click", onOk); cancelBtn.removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop); document.removeEventListener("keydown", onKey);
+      resolve(result);
+    };
+    const okBtn = document.getElementById("btn-confirm-ok"), cancelBtn = document.getElementById("btn-confirm-cancel");
+    const onOk = () => close(true), onCancel = () => close(false);
+    const onBackdrop = e => { if (e.target === modal) close(false); };
+    const onKey = e => { if (e.key === "Escape") close(false); };
+    okBtn.addEventListener("click", onOk); cancelBtn.addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop); document.addEventListener("keydown", onKey);
+    okBtn.focus();
+  });
+}
+
 /* ---------- 로그인 ---------- */
 document.getElementById("form-login").addEventListener("submit", async e => {
   e.preventDefault();
@@ -809,7 +832,7 @@ function memoMarkCell(slot, checks, date, today){
 }
 
 function showMemoSection(name){
-  ["home", "chapter", "verse", "range"].forEach(s => document.getElementById(`memo-${s}`).hidden = s !== name);
+  ["home", "chapter", "verse", "range", "review"].forEach(s => document.getElementById(`memo-${s}`).hidden = s !== name);
 }
 
 async function renderMemo(){
@@ -825,6 +848,9 @@ async function renderMemo(){
 function renderMemoHome(){
   leaveMemoTestScreen();
   showMemoSection("home");
+  const reviewer = isMemoReviewer();
+  document.getElementById("btn-memo-review-label").textContent = reviewer ? "채점 보기" : "시험 결과";
+  document.getElementById("btn-memo-review").hidden = !(reviewer || (memoData.myTests || []).length);
   renderMemoWeekBox();
 
   const mine = memoChecksOf(getCurrentUser().name);
@@ -929,7 +955,22 @@ function fillMemoRangeVerses(from, to){
   fromSel.value = from; toSel.value = to;
 }
 
+// 범위 암기 테스트를 채점자에게 보내는 중인지 / 내가 그 채점자인지
+function memoReviewOn(){ return !!(memoData && memoData.reviewOn); }
+function isMemoReviewer(){ return memoReviewOn() && memoData.reviewer === getCurrentUser().name; }
+// 범위 암기 테스트 아래 버튼은 하나 — 쓰는 중에는 채점하기(채점자에게 보내기가 켜져 있으면 제출하기),
+// 채점·제출을 마치면 같은 자리에서 다시하기로 바뀐다
+let memoRangeFinished = false; // 이번 테스트를 채점(또는 제출)했는지 — 했으면 화면을 벗어나도 답을 지우지 않는다
+function setMemoRangeAction(kind){
+  const btn = document.getElementById("btn-memo-range-grade");
+  btn.dataset.kind = kind;
+  btn.textContent = { grade: "채점하기", submit: "제출하기", retry: "다시하기" }[kind];
+  btn.hidden = false;
+}
+function memoRangeFreshAction(){ return memoReviewOn() ? "submit" : "grade"; }
+
 function openMemoRange(){
+  setMemoRangeAction(memoRangeFreshAction());
   document.getElementById("memo-range-chapter").value = "0";
   fillMemoRangeVerses(0, 0);
   document.getElementById("memo-range-panel").hidden = true;
@@ -944,6 +985,8 @@ async function startMemoRange(){
   if (!chapter || !from || !to){ showAlertModal("장과 절을 선택해주세요."); return; }
   // 전체화면 요청은 버튼을 누른 그 순간(다른 await 전에)에 해야 브라우저가 허락한다
   if (!(await enterMemoTestScreen())) return;
+  memoRangeFinished = false;
+  setMemoRangeAction(memoRangeFreshAction());
   const panel = document.getElementById("memo-range-panel");
   const list = document.getElementById("memo-range-list");
   const btn = document.getElementById("btn-memo-range-start");
@@ -1057,10 +1100,14 @@ function gradeMemoRange(){
   const summary = document.getElementById("memo-range-summary");
   summary.innerHTML = `${graded}개 절 중 <b>⭕ ${counts.ok + counts.space}개</b> · <b>❌ ${counts.wrong}개</b>${counts.skipped ? ` · 본문 미등록 ${counts.skipped}개` : ""}`;
   summary.hidden = false;
+  memoRangeFinished = true;
+  setMemoRangeAction("retry");
 }
 
 function resetMemoRange(focusFirst = true){
   if (!memoRange) return;
+  memoRangeFinished = false;
+  setMemoRangeAction(memoRangeFreshAction());
   document.getElementById("memo-range-summary").hidden = true;
   document.getElementById("memo-range-legend").hidden = true;
   buildMemoRangeRows(focusFirst);
@@ -1086,7 +1133,11 @@ function memoScreenLooksFull(){
   return true;
 }
 
+// 관리자가 "암기 테스트 보호"를 켜 두었는지 (기본: 켬). 끄면 전체화면·분할 화면·화면 이탈 검사를 모두 하지 않는다
+function memoStrictOn(){ return !memoData || memoData.strict !== false; }
+
 async function enterMemoTestScreen(){
+  if (!memoStrictOn()) return true;
   if (memoFullscreenSupported && !isMemoFullscreen()){
     const el = document.documentElement;
     try {
@@ -1119,7 +1170,7 @@ function leaveMemoTestScreen(){
 function memoRangeTestInProgress(){
   return !document.getElementById("memo-range").hidden && !!memoRange
     && !document.getElementById("memo-range-panel").hidden
-    && document.getElementById("memo-range-summary").hidden;
+    && !memoRangeFinished;
 }
 
 // 규칙을 어기면 테스트 창을 닫고(입력한 내용은 버림) 이유를 알려준다 — 다시 하려면 "테스트"를 새로 누른다
@@ -1150,7 +1201,7 @@ window.addEventListener("resize", () => {
   if (!isTouchDevice()) return;
   clearTimeout(memoResizeTimer);
   memoResizeTimer = setTimeout(() => {
-    if (memoRangeTestInProgress() && !memoScreenLooksFull()){
+    if (memoStrictOn() && memoRangeTestInProgress() && !memoScreenLooksFull()){
       abortMemoRangeTest("분할 화면으로 바뀌어\n입력한 내용이 지워졌습니다.\n화면 전체로 연 뒤 다시 테스트를 눌러 주세요.");
     }
   }, 700);
@@ -1160,12 +1211,12 @@ window.addEventListener("resize", () => {
 // 돌아와 베끼지 못하게. 돌아오면 지웠다는 걸 알려준다. (채점한 뒤에는 이미 정답이 보이는 상태라 그대로 둔다)
 let memoWipedWhileAway = false;
 function wipeMemoAnswersOnLeave(){
+  if (!memoStrictOn()) return;
   let wiped = false;
 
   // 범위 암기 테스트 — 채점 전에 입력칸에 쓴 게 하나라도 있으면 전부 비운다
   // (이미 채점했으면 정답이 다 보이는 상태라 결과를 그대로 둔다 — "다시하기"를 누르면 다시 지우는 대상)
-  const rangeGraded = !document.getElementById("memo-range-summary").hidden;
-  if (!document.getElementById("memo-range").hidden && memoRange && !rangeGraded){
+  if (!document.getElementById("memo-range").hidden && memoRange && !memoRangeFinished){
     const inputs = [...document.querySelectorAll("#memo-range-list .memo-range__input")];
     if (inputs.some(t => t.value.trim())){
       inputs.forEach(t => t.blur());
@@ -1194,11 +1245,203 @@ window.addEventListener("pagehide", wipeMemoAnswersOnLeave);
 document.getElementById("btn-memo-range").addEventListener("click", openMemoRange);
 document.getElementById("btn-memo-range-back").addEventListener("click", renderMemoHome);
 document.getElementById("btn-memo-range-start").addEventListener("click", startMemoRange);
-document.getElementById("btn-memo-range-grade").addEventListener("click", gradeMemoRange);
-// 다시하기도 새 테스트라서, 채점 뒤에 전체화면을 빠져나왔다면 다시 전체화면으로 바꾼 뒤 시작한다
-document.getElementById("btn-memo-range-reset").addEventListener("click", async () => {
-  if (!memoRange || !(await enterMemoTestScreen())) return;
-  resetMemoRange();
+document.getElementById("btn-memo-range-grade").addEventListener("click", async e => {
+  const kind = e.currentTarget.dataset.kind;
+  if (kind === "retry"){
+    // 다시하기도 새 테스트라서, 채점 뒤에 전체화면을 빠져나왔다면 다시 전체화면으로 바꾼 뒤 시작한다
+    if (!memoRange || !(await enterMemoTestScreen())) return;
+    resetMemoRange();
+    return;
+  }
+  if (kind === "submit"){
+    if (await showConfirmModal("정말 제출할까요?", "제출")) submitMemoRange();
+    return;
+  }
+  if (await showConfirmModal("정말 채점할까요?", "채점")) gradeMemoRange();
+});
+
+// 채점자에게 보내기: 결과는 보여주지 않고 쓴 답만 제출한다. 제출하면 테스트 화면을 닫고 채점 보기(내 기록) 화면으로 옮긴 뒤 "제출 완료!"를 크게 띄운다
+async function submitMemoRange(){
+  if (!memoRange) return;
+  const btn = document.getElementById("btn-memo-range-grade");
+  const inputs = [...document.querySelectorAll("#memo-range-list .memo-range__input")];
+  const answers = memoRange.verses
+    .map((v, i) => ({ verse: v.verse, text: v.text === null ? null : inputs[i].value }))
+    .filter(a => a.text !== null);
+  const from = memoRange.verses[0].verse, to = memoRange.verses[memoRange.verses.length - 1].verse;
+  btn.disabled = true;
+  try {
+    await api("/memorize", { method: "POST", body: { action: "submitTest", chapter: memoRange.chapter, from, to, answers } });
+  } catch (err) {
+    showAlertModal(err.message);
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  memoRangeFinished = true; // 제출 뒤에는 화면을 벗어나도 지우지 않는다
+  inputs.forEach(t => t.blur());
+  memoRange = null;
+  document.getElementById("memo-range-list").innerHTML = "";
+  document.getElementById("memo-range-panel").hidden = true;
+  leaveMemoTestScreen();
+  document.getElementById("done-modal").hidden = false;
+  await openMemoReview();
+}
+function closeDoneModal(){
+  document.getElementById("done-modal").hidden = true;
+}
+document.getElementById("btn-close-done").addEventListener("click", closeDoneModal);
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDoneModal(); });
+
+/* ---------- 채점 보기 (채점자 전용) ---------- */
+let memoReviewTests = [];
+let memoReviewMode = "all"; // all: 채점자가 모든 사람의 테스트를 봄 / mine: 내 시험 결과
+async function openMemoReview(){
+  memoReviewMode = isMemoReviewer() ? "all" : "mine";
+  showMemoSection("review");
+  document.getElementById("memo-review-detail").hidden = true;
+  document.getElementById("btn-memo-review-refresh").hidden = false;
+  document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
+  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? "채점 보기" : "시험 결과";
+  const list = document.getElementById("memo-review-list");
+  list.hidden = false;
+  list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  try {
+    memoReviewTests = memoReviewMode === "all"
+      ? (await api("/memorize?tests=1")).tests
+      : ((memoData = await api("/memorize")).myTests || []);
+  } catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">아직 기록이 없어요.</p>`; return; }
+
+  // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
+  const chapters = [...new Set(memoReviewTests.map(t => t.chapter))];
+  await Promise.all(chapters.map(c => getRevelationChapterText(c).catch(() => [])));
+  const nameOf = n => { const u = (memoData.users || []).find(x => x.name === n); return u && u.nickname ? `${n} · ${u.nickname}` : n; };
+
+  list.innerHTML = memoReviewTests.map((t, i) => {
+    const { ok, wrong } = t.pending ? { ok: 0, wrong: 0 } : scoreMemoTest(t);
+    const when = new Date(t.at);
+    const whenText = isNaN(when) ? "" : `${when.getMonth() + 1}월 ${when.getDate()}일 ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+    return `
+      <button type="button" class="memo-review-item${memoReviewMode === "mine" ? " memo-review-item--mine" : ""}" data-idx="${i}"${t.pending ? " disabled" : ""}>
+        ${memoReviewMode === "all"
+          ? `<span class="memo-review-item__name">${escapeHtml(nameOf(t.name))}${t.sent ? ` <small class="memo-review-item__sent">결과 보냄</small>` : ""}</span>
+             <span class="memo-review-item__range">${t.chapter}장 ${t.from}~${t.to}절</span>`
+          : `<span class="memo-review-item__name">${t.chapter}장 ${t.from}~${t.to}절<span class="memo-review-item__date">${whenText}</span>${!t.pending && !t.seen ? ` <small class="memo-review-item__new">새 결과</small>` : ""}</span>`}
+        <span class="memo-review-item__score">${t.pending ? `<small class="memo-review-item__wait">채점 대기</small>` : `⭕ ${ok} · ❌ ${wrong}`}</span>
+        ${memoReviewMode === "all" ? `<span class="memo-review-item__when">${whenText}</span>` : ""}
+      </button>`;
+  }).join("");
+  list.querySelectorAll("[data-idx]").forEach(b => b.addEventListener("click", () => openMemoReviewDetail(Number(b.dataset.idx))));
+}
+
+// 한 사람의 테스트를 채점 — 띄어쓰기만 다른 건 통과, 비워 둔 절은 오답, 본문 미등록 절은 빼고 센다
+function scoreMemoTest(t){
+  const texts = memoTextCache[t.chapter] || [];
+  let ok = 0, wrong = 0;
+  for (let v = t.from; v <= t.to; v++){
+    const src = texts.find(x => x.verse === v);
+    if (!src) continue;
+    const a = t.answers.find(x => x.verse === v);
+    if (!a || !normalizeVerseText(a.text)){ wrong++; continue; }
+    if (gradeMemoAnswer(a.text, src.text).status === "wrong") wrong++; else ok++;
+  }
+  return { ok, wrong };
+}
+
+// 제출된 테스트 하나를 채점된 모습으로: "N절" 위 빨간 동그라미/X, 쓴 답(틀린 곳 표시), 틀리면 정답
+function renderGradedMemoTest(t, texts){
+  const answerBox = html => `<div class="memo-range__answer"><span class="memo-range__answer-label">정답</span><div class="memo-result__text">${html}</div></div>`;
+  let ok = 0, wrong = 0, skipped = 0;
+  const rows = [];
+  for (let v = t.from; v <= t.to; v++){
+    const src = texts.find(x => x.verse === v);
+    const a = t.answers.find(x => x.verse === v);
+    if (!src){ skipped++; continue; }
+    let pass, status, body;
+    if (!a || !normalizeVerseText(a.text)){
+      pass = false; status = "wrong";
+      body = `<div class="memo-result__text memo-range__typed is-empty"></div>${answerBox(escapeHtml(normalizeVerseText(src.text)))}`;
+    } else {
+      const g = gradeMemoAnswer(a.text, src.text);
+      pass = g.status !== "wrong"; status = g.status;
+      const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
+      body = g.status === "ok" ? typed : typed + answerBox(g.sourceHTML);
+    }
+    if (pass) ok++; else wrong++;
+    rows.push(`
+      <div class="verse-input-row is-${status}">
+        <span class="verse-input-row__num"><span class="memo-range__numlabel">${v}절<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span></span>
+        <div class="verse-input-row__main"><div class="memo-range__result">${body}</div></div>
+      </div>`);
+  }
+  return { rowsHTML: rows.join(""), ok, wrong, skipped };
+}
+function gradedMemoSummaryHTML(ok, wrong, skipped){
+  return `${ok + wrong}개 절 중 <b>⭕ ${ok}개</b> · <b>❌ ${wrong}개</b>${skipped ? ` · 본문 미등록 ${skipped}개` : ""}`;
+}
+
+let memoReviewOpenIdx = -1;
+function openMemoReviewDetail(idx){
+  const t = memoReviewTests[idx];
+  const texts = memoTextCache[t.chapter] || [];
+  document.getElementById("memo-review-list").hidden = true;
+  document.getElementById("memo-review-detail").hidden = false;
+  document.getElementById("btn-memo-review-refresh").hidden = true;
+  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? t.name : "시험 결과";
+  document.getElementById("btn-memo-review-back").textContent = "‹ 목록";
+  document.getElementById("memo-review-detail-title").textContent = `${REVELATION.book} ${t.chapter}장 ${t.from}~${t.to}절`;
+
+  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t, texts);
+  memoReviewOpenIdx = idx;
+  const sendBtn = document.getElementById("btn-memo-send-result");
+  sendBtn.parentElement.hidden = memoReviewMode !== "all";
+  sendBtn.disabled = !!t.sent;
+  sendBtn.textContent = t.sent ? "결과 보냄 ✓" : "결과 보내기";
+  document.getElementById("memo-review-rows").innerHTML = rowsHTML;
+  document.getElementById("memo-review-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped);
+  window.scrollTo(0, 0);
+  if (memoReviewMode === "mine" && !t.seen) markMemoResultSeen(t, idx);
+}
+
+// 받은 결과를 처음 열어 보면 "확인"을 남기고 목록의 "새 결과" 표시를 뗀다
+function markMemoResultSeen(t, idx){
+  t.seen = new Date().toISOString();
+  const badge = document.querySelector(`.memo-review-item[data-idx="${idx}"] .memo-review-item__new`);
+  if (badge) badge.remove();
+  api("/memorize", { method: "POST", body: { action: "ackResults", ats: [t.at] } })
+    .catch(() => { /* 표시를 못 남겼으면 다음에 "새 결과"가 한 번 더 보이는 정도라 조용히 넘어간다 */ });
+}
+
+document.getElementById("btn-memo-review").addEventListener("click", openMemoReview);
+document.getElementById("btn-memo-review-refresh").addEventListener("click", openMemoReview);
+
+document.getElementById("btn-memo-send-result").addEventListener("click", async e => {
+  const btn = e.currentTarget; // 확인 창을 기다리는 사이에는 e.currentTarget이 비므로 먼저 잡아둔다
+  const t = memoReviewTests[memoReviewOpenIdx];
+  if (!t || t.sent) return;
+  if (!(await showConfirmModal(`${t.name}님에게 채점 결과를 보낼까요?`, "보내기"))) return;
+  btn.disabled = true;
+  try {
+    await api("/memorize", { method: "POST", body: { action: "sendResult", name: t.name, at: t.at } });
+    t.sent = new Date().toISOString();
+    btn.textContent = "결과 보냄 ✓";
+    // 보내고 나면 채점 보기 목록으로 돌아간다 (새로 불러와서 "결과 보냄" 표시까지)
+    await openMemoReview();
+  } catch (err) {
+    btn.disabled = false;
+    showAlertModal(err.message);
+  }
+});
+document.getElementById("btn-memo-review-back").addEventListener("click", () => {
+  if (!document.getElementById("memo-review-detail").hidden){
+    document.getElementById("memo-review-detail").hidden = true;
+    document.getElementById("memo-review-list").hidden = false;
+    document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? "채점 보기" : "시험 결과";
+    document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
+    return;
+  }
+  renderMemoHome();
 });
 
 /* ---------- 2단계: 한 장의 절 목록 ---------- */
@@ -1569,7 +1812,63 @@ async function loadAdminMemoPlan(){
   chapterSel.innerHTML = REVELATION.verses.map((_, i) => `<option value="${i + 1}">${i + 1}장</option>`).join("");
   chapterSel.value = memoData.startChapter;
   renderMemoPlanPreview(memoData.startDate, memoData.startChapter);
+  document.getElementById("memo-strict").checked = memoStrictOn();
+  document.getElementById("memo-strict-status").textContent = "";
+
+  const reviewerSel = document.getElementById("memo-reviewer");
+  reviewerSel.innerHTML = `<option value="">선택하세요</option>` +
+    (memoData.users || []).map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}${u.nickname ? " · " + escapeHtml(u.nickname) : ""}</option>`).join("");
+  reviewerSel.value = memoData.reviewer || "";
+  document.getElementById("memo-review-on").checked = !!memoData.reviewOn;
+  document.getElementById("memo-review-status").textContent = "";
 }
+
+async function saveMemoReviewSetting(){
+  const onCb = document.getElementById("memo-review-on");
+  const reviewerSel = document.getElementById("memo-reviewer");
+  const statusEl = document.getElementById("memo-review-status");
+  const on = onCb.checked, reviewer = reviewerSel.value;
+  if (on && !reviewer){
+    onCb.checked = false;
+    statusEl.textContent = "채점자를 먼저 선택해주세요.";
+    return;
+  }
+  onCb.disabled = reviewerSel.disabled = true;
+  statusEl.textContent = "저장 중…";
+  try {
+    await api("/memorize", { method: "POST", body: { action: "setReview", on, reviewer } });
+    if (memoData){ memoData.reviewOn = on && !!reviewer; memoData.reviewer = reviewer; }
+    statusEl.textContent = on ? `켰어요. 이제부터 범위 암기 테스트는 ${reviewer}님에게 보내져요.` : "껐어요. 각자 자기 채점 결과를 봐요.";
+  } catch (err) {
+    statusEl.textContent = err.message;
+    loadAdminMemoPlan();
+  } finally {
+    onCb.disabled = reviewerSel.disabled = false;
+  }
+}
+document.getElementById("memo-review-on").addEventListener("change", saveMemoReviewSetting);
+document.getElementById("memo-reviewer").addEventListener("change", () => {
+  // 켜져 있을 때 채점자를 바꾸면 바로 저장, 꺼져 있으면 켤 때 함께 저장
+  if (document.getElementById("memo-review-on").checked) saveMemoReviewSetting();
+});
+
+document.getElementById("memo-strict").addEventListener("change", async e => {
+  const cb = e.target;
+  const strict = cb.checked;
+  const statusEl = document.getElementById("memo-strict-status");
+  cb.disabled = true;
+  statusEl.textContent = "저장 중…";
+  try {
+    await api("/memorize", { method: "POST", body: { action: "setStrict", strict } });
+    if (memoData) memoData.strict = strict;
+    statusEl.textContent = strict ? "켰어요. 이제부터 시작하는 테스트에 적용돼요." : "껐어요. 이제부터 시작하는 테스트에는 보호가 적용되지 않아요.";
+  } catch (err) {
+    cb.checked = !strict;
+    statusEl.textContent = err.message;
+  } finally {
+    cb.disabled = false;
+  }
+});
 
 function renderMemoPlanPreview(startDate, startChapter){
   const el = document.getElementById("memoplan-preview");
@@ -1632,7 +1931,7 @@ document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(b => b.classList.remove("is-active"));
     btn.classList.add("is-active");
-    ["pending","members","assign","content","memoplan"].forEach(t =>
+    ["members","assign","content","memoplan"].forEach(t =>
       document.getElementById(`admin-${t}`).hidden = t !== btn.dataset.adminTab);
     if (btn.dataset.adminTab === "content") jumpToFirstEmptyChapter();
   });
@@ -1680,14 +1979,13 @@ async function jumpToFirstEmptyChapter(){
 
 async function renderAdmin(){
   contentAutoPicked = false; // 관리자 화면에 다시 들어오면 본문 입력 탭을 열 때 다시 빈 장을 찾는다
-  const pendingEl = document.getElementById("admin-pending");
-  pendingEl.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  const membersEl = document.getElementById("admin-members");
+  membersEl.innerHTML = `<p class="form-note">불러오는 중…</p>`;
 
   let data;
   try { data = await api("/admin"); }
-  catch (err){ pendingEl.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  catch (err){ membersEl.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
 
-  renderAdminPending(data.users);
   renderAdminMembers(data.users);
   document.getElementById("assign-start-date").value = data.startDate || "";
   renderAssignPreview(data.startDate);
@@ -1695,17 +1993,18 @@ async function renderAdmin(){
   loadAdminMemoPlan();
 }
 
-function renderAdminPending(users){
-  const pending = users.filter(u => u.status === "pending");
-  const el = document.getElementById("admin-pending");
-  el.innerHTML = pending.map(u => `
-    <div class="admin-row">
-      <span>${u.name}</span>
+// 승인 대기 회원 한 줄 (전체 회원 탭 맨 아래)
+function pendingRowsHTML(pending){
+  return pending.map(u => `
+    <div class="admin-row admin-row--pending">
+      <span class="admin-row__name">${u.name} <small class="admin-row__state admin-row__state--pending">승인 대기</small></span>
       <input type="text" placeholder="별명" data-nick="${u.name}">
       <button class="btn btn--primary" data-approve="${u.name}">승인</button>
       <button class="btn btn--ghost" data-reject="${u.name}">거절</button>
-    </div>`).join("") || `<p class="form-note">승인 대기 중인 회원이 없어요.</p>`;
+    </div>`).join("");
+}
 
+function bindPendingActions(el){
   el.querySelectorAll("[data-approve]").forEach(btn => btn.addEventListener("click", async () => {
     const name = btn.dataset.approve;
     const nick = el.querySelector(`[data-nick="${name}"]`).value.trim();
@@ -1739,6 +2038,17 @@ function renderAdminMembers(users){
       <button class="btn btn--ghost" data-set-active="${u.name}" data-active="${!active}">${active ? "비활성화" : "활성화"}</button>
     </div>`;
   }).join("") || `<p class="form-note">회원이 없어요.</p>`;
+
+  // 새로 가입해 승인을 기다리는 사람은 전체 회원 목록 맨 아래에도 바로 보이게 (여기서 바로 승인/거절)
+  const pending = users.filter(u => u.status === "pending");
+  if (pending.length){
+    el.insertAdjacentHTML("beforeend", `
+      <div class="admin-members__pending">
+        <p class="admin-members__pending-title">승인 대기 ${pending.length}명</p>
+        ${pendingRowsHTML(pending)}
+      </div>`);
+    bindPendingActions(el.querySelector(".admin-members__pending"));
+  }
 
   el.querySelectorAll("[data-editnick]").forEach(inp => inp.addEventListener("change", async () => {
     try {

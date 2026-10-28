@@ -4,7 +4,10 @@
 // 각 탭 1행은 항상 헤더로 취급하고 2행부터 데이터를 읽고 쓴다 (헤더 그대로 입력):
 //   Users:       이름 | 비밀번호해시 | 별명 | 상태 | 역할
 //   Submissions: 이름 | dayIndex | 제출시각
-//   Config:      key | value   (start_date, open_until, memo_start_date, memo_start_chapter)
+//   Config:      key | value   (start_date, open_until, memo_start_date, memo_start_chapter, memo_strict,
+//                                memo_review_on, memo_reviewer)
+//   MemoTests:   이름 | 제출시각 | 장 | 시작절 | 끝절 | 답안(JSON) | 보냄 | 확인  (범위 암기 테스트 기록 — 없으면 처음 쓸 때 자동 생성.
+//                채점자에게 제출하면 보냄·확인이 비어 있다가, 채점자가 결과를 보내면 "보냄", 본인이 결과를 처음 열어 보면 "확인"에 시각)
 //   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
 //   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
 
@@ -154,6 +157,9 @@ async function getConfig(){
   const openUntilRow = find("open_until");
   const memoStartRow = find("memo_start_date");
   const memoChapterRow = find("memo_start_chapter");
+  const memoStrictRow = find("memo_strict");
+  const memoReviewOnRow = find("memo_review_on");
+  const memoReviewerRow = find("memo_reviewer");
   return {
     start_date: startDateRow ? startDateRow[1] : "",
     // 관리자가 정한, 미리 입력을 허용하는 마지막 날짜. 비어있으면 클라이언트가 기본값(이번 주 토요일까지)을 적용한다
@@ -161,6 +167,11 @@ async function getConfig(){
     // 계시록 암기 시작일/시작 장 — 이 날부터 시작 장 1절부터 한 절씩 자동 배정된다 (data.js getMemoVerseForDate)
     memo_start_date: memoStartRow ? memoStartRow[1] : "",
     memo_start_chapter: memoChapterRow ? memoChapterRow[1] : "",
+    // 범위 암기 테스트 보호(전체화면 필수 등) — "0"이면 끔, 값이 없으면 켬
+    memo_strict: memoStrictRow ? String(memoStrictRow[1]) : "",
+    // 범위 암기 테스트를 채점자 한 명에게 보내는지 ("1"이면 켬, 기본은 끔)와 그 채점자 이름
+    memo_review_on: memoReviewOnRow ? String(memoReviewOnRow[1]) : "",
+    memo_reviewer: memoReviewerRow ? (memoReviewerRow[1] || "") : "",
   };
 }
 
@@ -174,6 +185,9 @@ async function setConfig(patch){
   if (patch.open_until !== undefined) upserts.push(["open_until", patch.open_until || ""]);
   if (patch.memo_start_date !== undefined) upserts.push(["memo_start_date", patch.memo_start_date || ""]);
   if (patch.memo_start_chapter !== undefined) upserts.push(["memo_start_chapter", patch.memo_start_chapter]);
+  if (patch.memo_strict !== undefined) upserts.push(["memo_strict", patch.memo_strict ? "1" : "0"]);
+  if (patch.memo_review_on !== undefined) upserts.push(["memo_review_on", patch.memo_review_on ? "1" : "0"]);
+  if (patch.memo_reviewer !== undefined) upserts.push(["memo_reviewer", patch.memo_reviewer || ""]);
 
   for (const [key, value] of upserts){
     const idx = rows.findIndex(r => r[0] === key);
@@ -254,6 +268,7 @@ async function setChapterVerses(book, chapter, verses){
 // 읽을 때 탭이 없으면 빈 것으로 취급하고, 처음 쓸 때 탭과 헤더를 자동으로 만든다.
 const MEMO_SHEETS = {
   Memorize: ["이름", "장", "절", "완료", "시각"],
+  MemoTests: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인"],
 };
 
 function isMissingSheetError(err){
@@ -323,10 +338,71 @@ async function setMemoCheck(name, chapter, verse, done){
   cacheClear("memoChecks");
 }
 
+/* ---------- 채점자에게 보낸 범위 암기 테스트 (MemoTests) ---------- */
+
+// 반환: [{ name, at, chapter, from, to, answers: [{ verse, text }], sent, seen }] — 최근 것이 먼저
+// (sent: 결과를 받은 시각, seen: 본인이 결과를 확인한 시각 — 없으면 "")
+async function getMemoTests(){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "MemoTests!A2:H");
+  return rows.filter(r => r[0]).map(r => {
+    let answers = [];
+    try { answers = JSON.parse(r[5] || "[]"); } catch { /* 깨진 칸은 빈 답으로 */ }
+    return { name: r[0], at: r[1], chapter: Number(r[2]), from: Number(r[3]), to: Number(r[4]), answers, sent: r[6] || "", seen: r[7] || "" };
+  }).reverse();
+}
+
+// 채점자가 한 사람의 테스트 결과를 보냄 — 그 줄(이름 + 제출시각으로 찾음)의 "보냄"에 시각 기록. 반환: 찾았는지
+async function markMemoTestSent(name, at){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "MemoTests!A2:B");
+  const idx = rows.findIndex(r => r[0] === name && r[1] === at);
+  if (idx === -1) return false;
+  const sheetRow = idx + 2;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID, range: `MemoTests!G${sheetRow}`, valueInputOption: "RAW",
+    requestBody: { values: [[new Date().toISOString()]] },
+  });
+  return true;
+}
+
+// 본인이 받은 결과 창을 닫으면 "확인"에 시각만 남긴다 (기록은 지우지 않음) — 결과를 받은 본인 줄만
+async function markMemoTestsSeen(name, ats){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "MemoTests!A2:H");
+  const now = new Date().toISOString();
+  let count = 0;
+  for (let i = 0; i < rows.length; i++){
+    const r = rows[i];
+    if (r[0] !== name || !ats.includes(r[1]) || !r[6] || r[7]) continue;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID, range: `MemoTests!H${i + 2}`, valueInputOption: "RAW",
+      requestBody: { values: [[now]] },
+    });
+    count++;
+  }
+  return count;
+}
+
+async function addMemoTest(test){
+  const sheets = await getSheetsClient();
+  const append = () => sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID, range: "MemoTests!A2:H", valueInputOption: "RAW",
+    requestBody: { values: [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), "", ""]] },
+  });
+  try { await append(); }
+  catch (err) {
+    if (!isMissingSheetError(err)) throw err;
+    await ensureSheet(sheets, "MemoTests");
+    await append();
+  }
+}
+
 module.exports = {
   getUsers, addUser, updateUser, removeUser, reorderUsers,
   getSubmissions, addSubmission,
   getConfig, setConfig,
   getChapterVerses, setChapterVerses, getChapterCounts,
   getMemoChecks, setMemoCheck,
+  getMemoTests, addMemoTest, markMemoTestSent, markMemoTestsSeen,
 };
