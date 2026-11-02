@@ -631,6 +631,18 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 .memo-keep-test input:focus-visible + .memo-keep-test__switch{ outline: 2px solid var(--focus); outline-offset:2px; }
 /* 관리자 → 암기 배정: 암기 테스트 보호 스위치 */
 .memoplan-strict{ margin-top:18px; padding-top:14px; border-top:1px solid var(--rule-soft); }
+#memoplan-status:empty + .memoplan-strict{ margin-top:0; padding-top:0; border-top:0; }
+/* 관리자: 시험 결과 관리 */
+.memo-admin__head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.memo-admin__head h4{ margin:0; font-size:1.05rem; }
+.memo-admin-names{ display:flex; flex-wrap:wrap; gap:8px; }
+.memo-admin-name{ border:0; border-radius:999px; padding:9px 16px; background: var(--card); box-shadow: var(--btn-shadow); cursor:pointer; font: inherit; font-weight:600; color: var(--ink); }
+.memo-admin-name small{ margin-left:4px; font-weight:400; color: var(--ink-soft); }
+.memo-admin-row{ display:flex; align-items:flex-start; gap:6px; }
+.memo-admin-row .memo-review-item{ flex:1; min-width:0; }
+.memo-admin-del{ flex:none; width:32px; height:32px; margin-top:8px; border:0; border-radius:50%; background:transparent; color: var(--ink-soft); cursor:pointer; font-size:1.1rem; line-height:1; }
+.memo-admin-del:hover{ background: var(--rule-soft); color: var(--red-ink); }
+.memo-admin-state{ font-size:.72rem; font-weight:600; color: var(--ink-soft); border:1px solid var(--rule); border-radius:999px; padding:1px 7px; margin-left:4px; }
 .memoplan-strict .memo-keep-test{ font-size:.92rem; color: var(--ink); font-weight:600; }
 .memoplan-reviewer{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:.88rem; color: var(--ink-soft); }
 .memoplan-reviewer select{ border:none; border-bottom:1px solid var(--rule); background:transparent; padding:5px 2px; font-size:16px; color: var(--ink); outline:none; min-width:140px; }

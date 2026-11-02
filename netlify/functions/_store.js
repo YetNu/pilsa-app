@@ -10,6 +10,11 @@
 //                채점자에게 제출하면 보냄·확인이 비어 있다가, 채점자가 결과를 보내면 "보냄", 본인이 결과를 처음 열어 보면 "확인"에 시각)
 //   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
 //   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
+//   GachaSets:   번호 | 이름                    (뽑기 종류 — 비어 있으면 1번 "기본" 하나가 있는 것으로 본다)
+//   GachaItems:  종류(당첨/벌칙) | 항목 | 뽑기번호  (뽑기 기계에 넣을 항목 — 뽑기번호가 비어 있으면 1번)
+//   GachaTokens: 이름 | 남은 횟수 | 뽑기번호     (관리자가 준 뽑기 기회 — 뽑기번호가 비어 있으면 1번)
+//   GachaLog:    이름 | 시각 | 항목 | 종류 | 뽑기 이름  (누가 언제 무엇을 뽑았는지)
+//   ※ Gacha 탭들도 없으면 처음 쓸 때 자동 생성
 
 const { getSheetsClient, SHEET_ID } = require("./_sheets");
 
@@ -269,6 +274,10 @@ async function setChapterVerses(book, chapter, verses){
 const MEMO_SHEETS = {
   Memorize: ["이름", "장", "절", "완료", "시각"],
   MemoTests: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인"],
+  GachaSets: ["번호", "이름"],
+  GachaItems: ["종류", "항목", "뽑기번호"],
+  GachaTokens: ["이름", "남은 횟수", "뽑기번호"],
+  GachaLog: ["이름", "시각", "항목", "종류", "뽑기 이름"],
 };
 
 function isMissingSheetError(err){
@@ -384,6 +393,22 @@ async function markMemoTestsSeen(name, ats){
   return count;
 }
 
+// 관리자: 시험 기록 한 줄 지우기 (이름 + 제출시각으로 찾음)
+async function deleteMemoTest(name, at){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "MemoTests!A2:B");
+  const idx = rows.findIndex(r => r[0] === name && r[1] === at);
+  if (idx === -1) return false;
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const sheet = meta.data.sheets.find(x => x.properties.title === "MemoTests");
+  const rowIndex0 = idx + 1; // 0-based 시트 행 인덱스, 헤더(0번 행) 다음부터 데이터
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { requests: [{ deleteDimension: { range: { sheetId: sheet.properties.sheetId, dimension: "ROWS", startIndex: rowIndex0, endIndex: rowIndex0 + 1 } } }] },
+  });
+  return true;
+}
+
 async function addMemoTest(test){
   const sheets = await getSheetsClient();
   const append = () => sheets.spreadsheets.values.append({
@@ -398,11 +423,160 @@ async function addMemoTest(test){
   }
 }
 
+/* ---------- 뽑기 (Gacha) ---------- */
+
+// 탭이 없어서 실패하면 탭을 만들고 한 번 더 한다
+async function withSheet(sheets, title, fn){
+  try { return await fn(); }
+  catch (err) {
+    if (!isMissingSheetError(err)) throw err;
+    await ensureSheet(sheets, title);
+    return fn();
+  }
+}
+
+const GACHA_TYPE_LABEL = { win: "당첨", pen: "벌칙" };
+const DEFAULT_GACHA_SET = "1"; // 뽑기 종류를 나누기 전에 만든 항목·기회는 모두 1번
+
+// 표 전체를 머리글부터 다시 쓴다 (줄을 지우거나 끼워 넣을 때)
+async function rewriteSheet(sheets, title, lastCol, rows){
+  await withSheet(sheets, title, () => sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `${title}!A1:${lastCol}` }));
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID, range: `${title}!A1`, valueInputOption: "RAW",
+    requestBody: { values: [MEMO_SHEETS[title], ...rows] },
+  });
+}
+
+// 반환: [{ id, name }]
+async function getGachaSets(){
+  const sheets = await getSheetsClient();
+  const rows = (await readMemoRows(sheets, "GachaSets!A2:B")).filter(r => r[0]);
+  if (!rows.length) return [{ id: DEFAULT_GACHA_SET, name: "기본" }];
+  return rows.map(r => ({ id: String(r[0]), name: String(r[1] || "") }));
+}
+async function saveGachaSets(sets){
+  const sheets = await getSheetsClient();
+  await rewriteSheet(sheets, "GachaSets", "B", sets.map(x => [x.id, x.name]));
+}
+// 뽑기 하나 추가 — 표에 이미 뽑기가 적혀 있으면 한 줄만 붙인다 (표가 비어 있으면 "기본"까지 함께 적는다)
+async function addGachaSet(set){
+  const sheets = await getSheetsClient();
+  const rows = (await readMemoRows(sheets, "GachaSets!A2:B")).filter(r => r[0]);
+  if (!rows.length){ await saveGachaSets([...(await getGachaSets()), set]); return; }
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID, range: "GachaSets!A2:B", valueInputOption: "RAW", requestBody: { values: [[set.id, set.name]] },
+  });
+}
+
+// 반환: [{ set, type: "win" | "pen", text }]
+async function getGachaItems(){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "GachaItems!A2:C");
+  return rows.filter(r => r[1]).map(r => ({ set: String(r[2] || DEFAULT_GACHA_SET), type: r[0] === "벌칙" ? "pen" : "win", text: String(r[1]) }));
+}
+
+// 한 뽑기의 항목 목록을 통째로 바꾼다 (다른 뽑기의 항목은 그대로)
+async function setGachaItems(setId, items){
+  const sheets = await getSheetsClient();
+  const all = await getGachaItems();
+  const rows = [];
+  // 뽑기 순서대로 묶어서 쓴다 — 바꾸는 뽑기는 원래 자리에, 처음이면 맨 뒤에
+  const order = [...new Set([...all.map(it => it.set), setId])];
+  for (const id of order){
+    const list = id === setId ? items : all.filter(it => it.set === id);
+    list.forEach(it => rows.push([GACHA_TYPE_LABEL[it.type], it.text, id]));
+  }
+  await rewriteSheet(sheets, "GachaItems", "C", rows);
+}
+
+// 반환: { [뽑기번호]: { [이름]: 남은 횟수 } }
+async function getGachaTokens(){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "GachaTokens!A2:C");
+  const map = {};
+  // 같은 이름이 여러 줄이면 첫 줄 기준 (setGachaTokens가 모든 줄을 같은 값으로 맞춘다)
+  rows.forEach(r => {
+    if (!r[0]) return;
+    const set = String(r[2] || DEFAULT_GACHA_SET);
+    map[set] = map[set] || {};
+    if (!(r[0] in map[set])) map[set][r[0]] = Math.max(0, parseInt(r[1], 10) || 0);
+  });
+  return map;
+}
+
+async function setGachaTokens(setId, name, count){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "GachaTokens!A2:C");
+  const idxs = rows.map((r, i) => r[0] === name && String(r[2] || DEFAULT_GACHA_SET) === setId ? i : -1).filter(i => i >= 0);
+  if (!idxs.length){
+    await withSheet(sheets, "GachaTokens", () => sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID, range: "GachaTokens!A2:C", valueInputOption: "RAW", requestBody: { values: [[name, count, setId]] },
+    }));
+    return;
+  }
+  // 동시에 들어온 요청 때문에 같은 이름이 두 줄 이상 생겼을 수 있다 — 전부 같은 값으로 맞춘다
+  for (const idx of idxs){
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID, range: `GachaTokens!B${idx + 2}:C${idx + 2}`, valueInputOption: "RAW", requestBody: { values: [[count, setId]] },
+    });
+  }
+}
+
+// 뽑기 하나를 없앤다 — 그 뽑기의 항목과 회원별 기회도 함께 (뽑은 기록은 남김)
+async function deleteGachaSet(setId){
+  const sheets = await getSheetsClient();
+  const [sets, items, tokenRows] = await Promise.all([
+    getGachaSets(), getGachaItems(), readMemoRows(sheets, "GachaTokens!A2:C"),
+  ]);
+  // 서로 다른 탭이라 한꺼번에 고쳐도 된다
+  await Promise.all([
+    saveGachaSets(sets.filter(x => x.id !== setId)),
+    rewriteSheet(sheets, "GachaItems", "C",
+      items.filter(it => it.set !== setId).map(it => [GACHA_TYPE_LABEL[it.type], it.text, it.set])),
+    rewriteSheet(sheets, "GachaTokens", "C",
+      tokenRows.filter(r => r[0] && String(r[2] || DEFAULT_GACHA_SET) !== setId).map(r => [r[0], r[1], String(r[2] || DEFAULT_GACHA_SET)])),
+  ]);
+}
+
+async function addGachaLog(entry){
+  const sheets = await getSheetsClient();
+  await withSheet(sheets, "GachaLog", () => sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID, range: "GachaLog!A2:E", valueInputOption: "RAW",
+    requestBody: { values: [[entry.name, entry.at, entry.text, GACHA_TYPE_LABEL[entry.type], entry.setName || ""]] },
+  }));
+}
+
+// 반환: [{ name, at, text, type, setName }] — 최근 것이 먼저
+async function getGachaLog(limit = 50){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "GachaLog!A2:E");
+  return rows.filter(r => r[0]).slice(-limit).reverse()
+    .map(r => ({ name: r[0], at: r[1], text: r[2] || "", type: r[3] === "벌칙" ? "pen" : "win", setName: r[4] || "" }));
+}
+
+// 뽑은 기록 한 줄 지우기 (이름 + 시각으로 찾음)
+async function deleteGachaLog(name, at){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "GachaLog!A2:B");
+  const idx = rows.findIndex(r => r[0] === name && r[1] === at);
+  if (idx === -1) return false;
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const sheet = meta.data.sheets.find(x => x.properties.title === "GachaLog");
+  const rowIndex0 = idx + 1; // 0-based 시트 행 인덱스, 헤더(0번 행) 다음부터 데이터
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { requests: [{ deleteDimension: { range: { sheetId: sheet.properties.sheetId, dimension: "ROWS", startIndex: rowIndex0, endIndex: rowIndex0 + 1 } } }] },
+  });
+  return true;
+}
+
 module.exports = {
   getUsers, addUser, updateUser, removeUser, reorderUsers,
   getSubmissions, addSubmission,
   getConfig, setConfig,
   getChapterVerses, setChapterVerses, getChapterCounts,
   getMemoChecks, setMemoCheck,
-  getMemoTests, addMemoTest, markMemoTestSent, markMemoTestsSeen,
+  getMemoTests, addMemoTest, markMemoTestSent, markMemoTestsSeen, deleteMemoTest,
+  getGachaSets, saveGachaSets, addGachaSet, deleteGachaSet,
+  getGachaItems, setGachaItems, getGachaTokens, setGachaTokens, addGachaLog, getGachaLog, deleteGachaLog,
 };

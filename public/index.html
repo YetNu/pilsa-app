@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>필사 — 말씀을 손끝으로</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Gothic+Coding&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Gothic+Coding&family=Jua&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/gacha.css" />
 </head>
 <body>
 
@@ -17,7 +18,13 @@
       <button class="topbar__btn" id="btn-mypilsa" title="필사">필사</button>
       <button class="topbar__btn" id="btn-memo" title="계시록 암기">계시록 암기</button>
     </div>
-    <div class="topbar__title" id="topbar-name"><!-- 로그인한 사람의 이름 (JS로 채움) --></div>
+    <div class="topbar__title">
+      <span id="topbar-name"><!-- 로그인한 사람의 이름 (JS로 채움) --></span>
+      <!-- 관리자가 준 뽑기 기회가 있을 때만 보이는 뽑기 아이콘 (숫자 = 남은 기회) -->
+      <button type="button" class="gacha-chip" id="btn-gacha" hidden aria-label="뽑기" title="뽑기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.2h10" stroke="#ee8a33" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="10.5" r="6.3" fill="#fff" stroke="#ee8a33" stroke-width="1.6"/><circle cx="9.7" cy="11.6" r="1.9" fill="#ff6fae"/><circle cx="14.3" cy="11.4" r="1.9" fill="#3fa9f5"/><circle cx="12" cy="8.2" r="1.9" fill="#ffc53d"/><rect x="5.5" y="15.6" width="13" height="6" rx="2" fill="#ffc48c"/><circle cx="12" cy="18.6" r="1.4" fill="#fff"/></svg><span id="gacha-chip-count">0</span>
+      </button>
+    </div>
     <div class="topbar__right">
       <button class="topbar__btn" id="btn-admin" hidden title="관리자">관리자</button>
       <button class="topbar__btn topbar__btn--logout" id="btn-logout" title="로그아웃">로그아웃</button>
@@ -310,26 +317,14 @@
 
       <div class="tabs">
         <button class="tabs__btn is-active" data-admin-tab="members">전체 회원</button>
-        <button class="tabs__btn" data-admin-tab="assign">성경 장 배정</button>
         <button class="tabs__btn" data-admin-tab="content">본문 입력</button>
-        <button class="tabs__btn" data-admin-tab="memoplan">암기 배정</button>
+        <button class="tabs__btn" data-admin-tab="memoplan">암기 설정</button>
+        <button class="tabs__btn" data-admin-tab="memotests">시험 결과</button>
+        <button class="tabs__btn" data-admin-tab="gacha">뽑기</button>
       </div>
 
       <!-- 전체 회원 (승인 대기 중인 새 가입자는 목록 맨 아래에서 바로 승인/거절) -->
       <div class="admin-panel" id="admin-members"></div>
-      <div class="admin-panel" id="admin-assign" hidden>
-        <label>시작일
-          <input type="date" id="assign-start-date">
-        </label>
-        <button class="btn btn--primary" id="btn-assign-save">배정 계산하기</button>
-        <p class="form-note">시작일부터 서신서 순서(로마서→유다서)로 하루 1장씩 자동 배정됩니다. 2026-10-11부터는 평일(월~금)에만 1장씩(주 5장) 배정되고 토·일은 쉬어요.</p>
-        <div id="assign-preview"></div>
-
-        <label>미리 열기 마감일
-          <input type="date" id="assign-open-until">
-        </label>
-        <p class="form-note">기본으로 이번 주(토요일까지) 분량이 모두 열려 있어요. 그보다 더 뒤까지 미리 열고 싶을 때만 날짜를 정하세요.</p>
-      </div>
       <div class="admin-panel" id="admin-content" hidden>
         <div class="content-picker">
           <label>책
@@ -348,16 +343,7 @@
         <button class="btn btn--primary" id="btn-content-save">저장하기</button>
       </div>
       <div class="admin-panel" id="admin-memoplan" hidden>
-        <label>암기 시작일
-          <input type="date" id="memoplan-start-date">
-        </label>
-        <label>시작 장
-          <select id="memoplan-start-chapter"></select>
-        </label>
-        <button class="btn btn--primary" id="btn-memoplan-save">배정 계산하기</button>
         <p class="form-note" id="memoplan-status"></p>
-        <p class="form-note">시작일부터 시작 장 1절부터 한 절씩 자동 배정됩니다 (2026-10-24까지는 평일만, 10-25부터는 매일). 22장까지 마치면 1장으로 돌아가 시작 장 앞까지 이어져요.</p>
-        <div id="memoplan-preview"></div>
 
         <!-- 범위 암기 테스트 보호 켜기/끄기 (모든 회원에게 적용) -->
         <div class="memoplan-strict">
@@ -383,6 +369,60 @@
           <p class="form-note">켜 두면 범위 암기 테스트를 친 사람은 채점 결과를 보지 않고 "제출"만 하고, 지정한 채점자가 "계시록 암기 → 시험 결과"에서 모든 사람의 채점 결과를 봐요. 끄면 각자 자기 채점 결과를 봐요.</p>
           <p class="form-note" id="memo-review-status"></p>
         </div>
+      </div>
+
+      <!-- 시험 결과 관리: 이름 → 그 사람의 시험 결과 목록(지우기) → 채점된 결과 보기 -->
+      <div class="admin-panel" id="admin-memotests" hidden>
+        <div class="memo-admin__head">
+          <button type="button" class="btn btn--ghost btn-back" id="btn-memo-admin-back" hidden>‹ 이름</button>
+          <h4 id="memo-admin-title">시험 결과 관리</h4>
+        </div>
+        <div class="memo-admin-names" id="memo-admin-names"></div>
+        <div id="memo-admin-list" hidden></div>
+        <div id="memo-admin-detail" hidden>
+          <div class="memo-range__head">
+            <h3 id="memo-admin-detail-title"></h3>
+            <span class="memo-range__legend">
+              <span class="memo-range__legend-red">빨강</span> = 오타, <span class="memo-range__legend-orange">주황</span> = 띄어쓰기
+            </span>
+          </div>
+          <div class="verse-input-list" id="memo-admin-rows"></div>
+          <p class="memo-range__summary" id="memo-admin-summary"></p>
+        </div>
+      </div>
+
+      <!-- 뽑기: 기계에 넣을 항목 + 회원별 뽑기 기회 + 최근 뽑은 기록 -->
+      <div class="admin-panel gacha-admin" id="admin-gacha" hidden>
+        <section>
+          <h4>뽑기 설정</h4>
+          <!-- 뽑기 고르는 탭 — 고른 탭을 한 번 더 누르면 그 자리에서 이름을 고친다. 아래 상자는 그 뽑기의 항목 -->
+          <div class="gacha-sets" id="gacha-admin-sets" role="tablist"></div>
+          <div class="gacha-set-card">
+            <div class="gacha-set-head">
+              <span class="gacha-set-status" id="gacha-set-status" aria-live="polite"></span>
+              <button type="button" class="gacha-set-delete" id="btn-gacha-set-delete" title="이 뽑기 삭제" aria-label="이 뽑기 삭제">삭제</button>
+            </div>
+            <div class="gacha-kind" role="radiogroup" aria-label="항목 종류">
+              <label><input type="radio" name="gacha-kind" value="win" checked><span>당첨</span></label>
+              <label><input type="radio" name="gacha-kind" value="pen"><span>벌칙</span></label>
+            </div>
+            <form class="gacha-add" id="gacha-add-form" autocomplete="off">
+              <input type="text" id="gacha-new-item" maxlength="40" placeholder="항목 입력 (쉼표로 여러 개)">
+              <button type="submit" class="btn btn--primary">등록</button>
+            </form>
+            <ul class="gacha-items" id="gacha-items"></ul>
+            <p class="form-note" id="gacha-items-status"></p>
+          </div>
+        </section>
+        <section>
+          <h4><span class="gacha-cur-set"></span> 기회</h4>
+          <p class="form-note">＋를 누르면 그 사람에게 이 뽑기의 기회가 하나 생기고, 이름 옆에 뽑기 아이콘이 떠요. 한 번 뽑을 때마다 하나씩 줄어요.</p>
+          <div class="gacha-tokens" id="gacha-tokens"></div>
+        </section>
+        <section>
+          <h4>최근 뽑은 기록</h4>
+          <ul class="gacha-log" id="gacha-log"></ul>
+        </section>
       </div>
     </section>
 
@@ -444,7 +484,62 @@
     </div>
   </div>
 
+  <!-- ============ 뽑기 기계 (화면 전체) ============ -->
+  <div class="gacha gc-scope" id="gacha" hidden role="dialog" aria-modal="true" aria-labelledby="gacha-title">
+    <div class="gacha__inner">
+      <div class="gacha__head">
+        <h2 class="gacha__title" id="gacha-title">랜덤 <span>뽑기</span><small class="gacha__set" id="gacha-set-name"></small></h2>
+        <button type="button" class="gacha__mute" id="gacha-mute" aria-pressed="false">🔊 소리 켜짐</button>
+        <button type="button" class="gacha__close" id="gacha-close" aria-label="닫기">✕</button>
+      </div>
+      <!-- 기회가 있는 뽑기가 둘 이상이면 골라서 뽑는다 -->
+      <div class="gacha__sets" id="gacha-sets" hidden></div>
+      <div class="gc-machine">
+        <div class="gc-lid"></div>
+        <div class="gc-dome">
+          <div class="gc-glass" id="gacha-glass"><canvas id="gacha-balls"></canvas><div class="gc-glare"></div></div>
+        </div>
+        <div class="gc-plate" id="gacha-vent"><span class="gc-gusts" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></span></div>
+        <div class="gc-base">
+          <button class="gc-pull" id="gacha-pull" type="button">뽑기</button>
+          <div class="gc-chute" aria-hidden="true"><div class="gc-chute__frame"></div><div class="gc-chute__hole"><div class="gc-mini" id="gacha-mini"></div></div><div class="gc-chute__lip"></div></div>
+        </div>
+        <div class="gc-feet"><i></i><i></i></div>
+        <div class="gc-floor"></div>
+      </div>
+      <div class="gacha__below">
+        <p class="gacha__left">남은 기회 <b id="gacha-left">0</b>번</p>
+        <!-- 공 섞기: 기회를 쓰지 않고 바람만 불어 공을 섞어 본다 -->
+        <button type="button" class="gacha__mix" id="gacha-mix" aria-label="공 섞기" title="공 섞기">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5c2 0 3.2 1 4.3 2.6l2.4 3.8c1.1 1.6 2.3 2.6 4.3 2.6H21M3 17h3.5c1.2 0 2.1-.4 2.9-1.1M14.6 8.1c.8-.7 1.7-1.1 2.9-1.1H21M18 4l3 3-3 3M18 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>섞기</span>
+        </button>
+      </div>
+      <p class="gacha__msg" id="gacha-msg"></p>
+    </div>
+  </div>
+
+  <div class="gc-reveal gc-scope" id="gacha-reveal" hidden>
+    <canvas class="gc-confetti" id="gacha-confetti"></canvas>
+    <div class="gc-storm"></div>
+    <div class="gc-rstage">
+      <div class="gc-rays"></div>
+      <div class="gc-flash" id="gacha-flash"></div>
+      <div class="gc-bigcap" id="gacha-bigcap"><div class="gc-bigcap__half gc-bigcap__top"></div><div class="gc-bigcap__half gc-bigcap__bot"></div></div>
+      <div class="gc-paper" id="gacha-paper">
+        <div class="gc-roll"></div>
+        <div class="gc-stamp" id="gacha-stamp">당첨</div>
+        <p class="gc-ptext" id="gacha-ptext"></p>
+      </div>
+      <div class="gc-ractions">
+        <button class="gc-btn gc-btn--primary" id="gacha-again" type="button">한 번 더 뽑기</button>
+        <button class="gc-btn gc-btn--ghost" id="gacha-reveal-close" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/data.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/gacha.js"></script>
 </body>
 </html>

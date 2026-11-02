@@ -1,0 +1,243 @@
+/* ===========================================================
+   뽑기 — 관리자가 준 기회로 뽑는 캡슐 기계 (화면 전체를 덮는 창)
+   앱의 다른 화면과 이름이 겹치지 않게 모든 클래스는 gc- 로 시작하고,
+   색 변수도 .gc-scope 안에서만 쓴다
+   =========================================================== */
+.gc-scope{
+  --gc-fg:#3b2a30; --gc-muted:#8d7479; --gc-line:#efe3dc; --gc-soft:#f8f4f1; --gc-strong:#1d1715;
+  --gc-accent:#ff8a1f; --gc-accent-deep:#d9680a;
+  --gc-shell:#fffdf9; --gc-shell-2:#fff4e8; --gc-shell-3:#f7e4cf;
+  --gc-pink:#ffdcb8; --gc-pink-2:#ffc48c; --gc-pink-3:#ffad62; --gc-pink-dark:#ee8a33;
+  --gc-paper:#fffdf5; --gc-paper-line:#dbe7f3; --gc-paper-ink:#2b2530; --gc-stamp:#e5364f;
+  --gc-display:'Jua','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+}
+
+/* 상단 바: 이름 옆 뽑기 아이콘 (기회가 있을 때만) */
+.gacha-chip{
+  display:inline-flex; align-items:center; gap:3px; margin-left:8px; vertical-align:middle;
+  padding:3px 8px 3px 5px; border:0; border-radius:999px; cursor:pointer;
+  background:#fff1e3; color:#d9680a; font: 700 .8rem/1 var(--sans); letter-spacing:0;
+  box-shadow: 0 0 0 1.5px #ffc48c;
+  animation: gc-chip 2.4s ease-in-out infinite;
+}
+.gacha-chip svg{ width:20px; height:20px; display:block; }
+.gacha-chip:hover{ background:#ffe4c7; }
+@keyframes gc-chip{ 50%{ box-shadow: 0 0 0 1.5px #ffc48c, 0 0 10px 2px rgba(255,160,70,.45); } }
+
+/* ---------- 뽑기 창 ---------- */
+.gacha{
+  position:fixed; inset:0; z-index:60; overflow-y:auto; background:#fff;
+  color:var(--gc-fg); touch-action:manipulation;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.gacha__inner{ max-width:520px; margin:0 auto; display:flex; flex-direction:column; align-items:center; gap:14px; }
+.gacha__head{ width:100%; display:flex; align-items:center; gap:10px; }
+.gacha__title{ margin:0; font-family:var(--gc-display); font-weight:400; font-size:clamp(26px,6vw,34px); color:var(--gc-strong); line-height:1.1; }
+.gacha__title span{ color:var(--gc-accent); }
+.gacha__set{ font-size:.55em; color: var(--gc-muted); margin-left:2px; }
+.gacha__sets{ width:100%; display:flex; flex-wrap:wrap; gap:6px; }
+.gacha__set-btn{ font: inherit; font-size:.85rem; padding:5px 12px; border-radius:999px; border:1px solid var(--gc-line); background:#fff; color: var(--gc-fg); cursor:pointer; }
+.gacha__set-btn b{ color: var(--gc-accent-deep); margin-left:2px; }
+.gacha__set-btn.is-active{ border-color: var(--gc-accent); background:#fff1e3; font-weight:700; }
+/* 기계 바로 밑: 남은 기회 + 공 섞기 */
+.gacha__below{ display:flex; align-items:center; justify-content:center; gap:12px; margin-top:-4px; }
+.gacha__mix{ display:inline-flex; align-items:center; gap:4px; padding:6px 12px 6px 9px; border:1px solid var(--gc-line); border-radius:999px; background:#fff; color:var(--gc-pink-dark); font: inherit; font-size:.85rem; cursor:pointer; }
+.gacha__mix svg{ width:18px; height:18px; }
+.gacha__mix:hover{ background:#fff1e3; border-color: var(--gc-pink-2); }
+.gacha__mix:disabled{ opacity:.45; cursor:default; }
+.gacha__left{ margin:0; font-size:1rem; color:var(--gc-muted); text-align:center; }
+.gacha__left b{ color:var(--gc-accent-deep); font-size:1.25rem; }
+.gacha__mute{ margin-left:auto; font: inherit; font-size:.85rem; background:#fff; color:var(--gc-fg); border:1px solid var(--gc-line); border-radius:999px; padding:6px 12px; cursor:pointer; }
+.gacha__close{ width:36px; height:36px; border:0; border-radius:10px; background:transparent; color:var(--gc-muted); font-size:22px; line-height:1; cursor:pointer; }
+.gacha__close:hover{ background:var(--gc-soft); color:var(--gc-fg); }
+.gacha__msg{ margin:0; min-height:1.4em; color:var(--gc-muted); font-size:.9rem; text-align:center; }
+
+/* ---------- 기계 (앞모습) ---------- */
+.gc-machine{
+  /* 폭과 높이 모두에 맞춘다 — 기계 전체 높이는 대략 S의 1.8배 */
+  --S: min(360px, calc(100vw - 48px), calc((100vh - 200px) / 1.8));
+  --S: min(360px, calc(100vw - 48px), calc((100dvh - 200px) / 1.8));
+  display:flex; flex-direction:column; align-items:center; position:relative; user-select:none; padding-top:10px;
+}
+.gc-lid{width:calc(var(--S)*.66); height:calc(var(--S)*.11); position:relative; z-index:6;
+  background:linear-gradient(180deg,#fff0e0 0%,var(--gc-pink) 60%,var(--gc-pink-2) 100%);
+  border-radius:50% 50% 18px 18px / 70% 70% 18px 18px; box-shadow:0 8px 14px rgba(200,120,50,.22), inset 0 -5px 0 rgba(220,120,40,.35), inset 0 3px 0 rgba(255,255,255,.7)}
+.gc-lid::before{content:""; position:absolute; left:50%; top:calc(var(--S)*-.035); width:calc(var(--S)*.1); height:calc(var(--S)*.045); transform:translateX(-50%);
+  border-radius:12px 12px 4px 4px; background:linear-gradient(#fff0e0,var(--gc-pink-2)); box-shadow:inset 0 2px 0 rgba(255,255,255,.7)}
+.gc-lid::after{content:""; position:absolute; left:6%; right:6%; bottom:-6px; height:10px; border-radius:0 0 50% 50%; background:var(--gc-pink-3); opacity:.55; z-index:-1}
+.gc-dome{width:var(--S); height:calc(var(--S)*.86); position:relative; overflow:hidden; filter:drop-shadow(0 8px 18px rgba(200,140,90,.18)); margin-top:calc(var(--S)*-.06); z-index:5}
+.gc-glass{position:absolute; left:0; top:0; width:var(--S); height:var(--S); border-radius:50%; overflow:hidden;
+  background:radial-gradient(circle at 50% 42%, rgba(255,255,255,.55), rgba(255,244,232,.35) 62%, rgba(250,220,190,.45) 100%);
+  box-shadow:inset 0 0 0 1.5px rgba(225,180,140,.55), inset 0 0 0 5px rgba(255,255,255,.85), inset 0 0 26px rgba(240,190,140,.35)}
+.gc-glass canvas{position:absolute; left:0; top:0; width:100%; height:100%; display:block}
+.gc-glare{position:absolute; inset:0; pointer-events:none; border-radius:50%;
+  background:
+   radial-gradient(ellipse 7% 26% at 10% 46%, rgba(255,255,255,.8), transparent 70%),
+   radial-gradient(ellipse 22% 7% at 30% 16%, rgba(255,255,255,.7), transparent 70%),
+   radial-gradient(ellipse 5% 18% at 92% 50%, rgba(255,255,255,.55), transparent 70%)}
+.gc-plate{position:relative; width:calc(var(--S)*.76); height:calc(var(--S)*.05); margin-top:-3px; z-index:6; border-radius:6px;
+  background:linear-gradient(180deg,var(--gc-pink),var(--gc-pink-2)); box-shadow:inset 0 2px 0 rgba(255,255,255,.55), 0 3px 5px rgba(200,120,50,.25);
+  transition:box-shadow .3s}
+.gc-plate.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.55), 0 3px 5px rgba(200,120,50,.25), 0 -12px 30px 6px rgba(150,205,255,.7)}
+.gc-gusts{position:absolute; left:15%; right:15%; bottom:100%; height:calc(var(--S)*.3); pointer-events:none; opacity:0; transition:opacity .3s}
+.gc-plate.on .gc-gusts{opacity:1}
+.gc-gusts b{position:absolute; bottom:0; width:4px; height:calc(var(--S)*.12); border-radius:4px; background:linear-gradient(0deg,rgba(120,190,255,0),rgba(120,190,255,.85)); animation:gc-rise .55s linear infinite}
+.gc-gusts b:nth-child(1){left:6%; animation-delay:.1s} .gc-gusts b:nth-child(2){left:28%; animation-delay:.35s} .gc-gusts b:nth-child(3){left:50%}
+.gc-gusts b:nth-child(4){left:72%; animation-delay:.25s} .gc-gusts b:nth-child(5){left:94%; animation-delay:.45s}
+@keyframes gc-rise{from{transform:translateY(0); opacity:0} 30%{opacity:1} to{transform:translateY(calc(var(--S)*-.2)); opacity:0}}
+.gc-base{width:calc(var(--S)*.86); height:calc(var(--S)*.72); position:relative; z-index:4; margin-top:-2px;
+  background:linear-gradient(180deg,#fffcf7 0%,var(--gc-shell) 45%,var(--gc-shell-2) 100%);
+  border-radius:calc(var(--S)*.06) calc(var(--S)*.06) calc(var(--S)*.07) calc(var(--S)*.07);
+  box-shadow:inset 0 3px 0 #fff, inset -14px -12px 26px rgba(220,180,140,.22), inset 12px 0 20px rgba(255,255,255,.6), 0 22px 30px rgba(170,110,60,.18);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:calc(var(--S)*.05); padding-top:calc(var(--S)*.02)}
+.gc-feet{width:calc(var(--S)*.72); display:flex; justify-content:space-between; margin-top:-2px}
+.gc-feet i{width:calc(var(--S)*.08); height:9px; border-radius:0 0 8px 8px; background:var(--gc-shell-3)}
+.gc-floor{width:calc(var(--S)*1.0); height:18px; margin-top:-6px; border-radius:50%; background:radial-gradient(ellipse, rgba(150,95,50,.25), transparent 70%)}
+.gc-pull{width:calc(var(--S)*.25); height:calc(var(--S)*.25); border-radius:50%; border:0; cursor:pointer; position:relative;
+  background:radial-gradient(circle at 40% 35%, #ffffff, var(--gc-shell) 60%, var(--gc-shell-2));
+  box-shadow:0 0 0 5px #ffefdc, 0 0 0 7px var(--gc-pink-2), 0 0 18px 7px rgba(255,160,70,.45), inset 0 -4px 8px rgba(210,160,110,.25);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--gc-pink-dark);
+  font-family:var(--gc-display); font-size:calc(var(--S)*.045); transition:transform .1s, box-shadow .1s}
+.gc-pull::before{content:""; width:38%; height:7px; border-radius:4px; background:#ead8c6; box-shadow:inset 0 2px 2px rgba(120,80,40,.3)}
+.gc-pull:hover{box-shadow:0 0 0 5px #ffefdc, 0 0 0 7px var(--gc-pink-2), 0 0 24px 10px rgba(255,160,70,.6), inset 0 -4px 8px rgba(210,160,110,.25)}
+.gc-pull:active, .gc-pull.press{transform:scale(.95); box-shadow:0 0 0 5px #ffefdc, 0 0 0 7px var(--gc-pink-3), 0 0 10px 4px rgba(255,160,70,.4), inset 0 4px 10px rgba(210,160,110,.4)}
+.gc-pull:disabled{cursor:not-allowed; opacity:.6}
+.gc-pull.ready{animation:gc-glow 2.2s ease-in-out infinite}
+@keyframes gc-glow{50%{box-shadow:0 0 0 5px #ffefdc, 0 0 0 7px var(--gc-pink-2), 0 0 28px 12px rgba(255,160,70,.65), inset 0 -4px 8px rgba(210,160,110,.25)}}
+.gc-chute{width:calc(var(--S)*.34); height:calc(var(--S)*.25); position:relative}
+.gc-chute__frame{position:absolute; inset:0; border-radius:calc(var(--S)*.05) calc(var(--S)*.05) 8px 8px; background:var(--gc-pink); box-shadow:inset 0 2px 0 rgba(255,255,255,.6), 0 2px 4px rgba(200,120,50,.25)}
+.gc-chute__hole{position:absolute; left:9%; right:9%; top:9%; bottom:0; border-radius:calc(var(--S)*.04) calc(var(--S)*.04) 0 0; overflow:hidden;
+  background:linear-gradient(180deg,#e98a3c 0%,#f6b77a 55%,#fcd3a6 100%); box-shadow:inset 0 10px 14px rgba(150,70,20,.35)}
+.gc-chute__lip{position:absolute; left:4%; right:4%; bottom:calc(var(--S)*-.035); height:calc(var(--S)*.08); z-index:3;
+  background:linear-gradient(180deg,var(--gc-pink),var(--gc-pink-2)); clip-path:polygon(0 0,100% 0,94% 100%,6% 100%); border-radius:0 0 6px 6px}
+.gc-mini{position:absolute; left:50%; width:calc(var(--S)*.15); height:calc(var(--S)*.15); margin-left:calc(var(--S)*-.075); top:-70%; border-radius:50%; z-index:2;
+  background:linear-gradient(180deg, var(--c) 0 50%, #fdfbfc 50% 100%); box-shadow:inset -5px -6px 9px rgba(120,60,20,.18), inset 5px 5px 7px rgba(255,255,255,.75); opacity:0}
+.gc-mini.drop{animation:gc-drop .7s cubic-bezier(.3,.1,.3,1) forwards}
+@keyframes gc-drop{0%{top:-70%; opacity:1} 60%{top:42%} 75%{top:32%} 90%{top:42%} 100%{top:40%; opacity:1}}
+
+/* ---------- 결과 공개 ---------- */
+.gc-reveal{position:fixed; inset:0; z-index:70; display:grid; place-items:center; background:rgba(20,14,28,.66); /* 흐림(blur)은 흔들림 효과와 겹치면 느려서 쓰지 않는다 */
+  padding:env(safe-area-inset-top,0px) max(16px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(16px,env(safe-area-inset-left,0px));
+  opacity:0; transition:opacity .25s}
+.gc-reveal.show{opacity:1}
+.gc-reveal[hidden]{display:none}
+.gc-confetti{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:3}
+.gc-rstage{position:relative; z-index:2; width:min(600px,100%); height:min(640px,94vh); display:grid; place-items:center}
+.gc-rays{position:absolute; width:min(640px,150vw); aspect-ratio:1; border-radius:50%; opacity:0; transition:opacity .5s;
+  background:repeating-conic-gradient(from 0deg, rgba(255,230,120,.32) 0 10deg, transparent 10deg 22deg);
+  -webkit-mask:radial-gradient(circle, #000 20%, transparent 68%); mask:radial-gradient(circle, #000 20%, transparent 68%); animation:gc-spin 14s linear infinite}
+@keyframes gc-spin{to{transform:rotate(360deg)}}
+.gc-reveal.rays-on .gc-rays{opacity:1}
+.gc-bigcap{position:absolute; width:150px; height:150px; transform:scale(0); transition:transform .35s cubic-bezier(.2,1.6,.4,1)}
+.gc-reveal.show .gc-bigcap{transform:scale(1)}
+.gc-bigcap__half{position:absolute; left:0; width:150px; height:75px; transition:transform .55s cubic-bezier(.3,.7,.3,1), opacity .55s}
+.gc-bigcap__top{top:0; border-radius:75px 75px 0 0; background:var(--c); box-shadow:inset -10px 6px 18px rgba(255,255,255,.45), inset 8px -4px 12px rgba(0,0,0,.08); transform-origin:15% 100%}
+.gc-bigcap__top::after{content:""; position:absolute; left:26px; top:16px; width:40px; height:18px; border-radius:50%; background:rgba(255,255,255,.6); transform:rotate(-25deg)}
+.gc-bigcap__bot{bottom:0; border-radius:0 0 75px 75px; background:#fbfbfd; box-shadow:inset -10px -10px 18px rgba(0,0,0,.12); border-top:3px solid rgba(0,0,0,.08)}
+.gc-bigcap.wiggle{animation:gc-wiggle .5s ease-in-out}
+@keyframes gc-wiggle{0%,100%{rotate:0deg} 20%{rotate:-12deg} 40%{rotate:10deg} 60%{rotate:-7deg} 80%{rotate:4deg}}
+.gc-bigcap.split .gc-bigcap__top{transform:translate(-40px,-170px) rotate(-70deg); opacity:0}
+.gc-bigcap.split .gc-bigcap__bot{transform:translateY(200px) rotate(20deg); opacity:0}
+.gc-flash{position:absolute; width:40px; height:40px; border-radius:50%; background:#fff; opacity:0; pointer-events:none}
+.gc-flash.go{animation:gc-flash .55s ease-out}
+@keyframes gc-flash{0%{transform:scale(.5); opacity:.95} 100%{transform:scale(14); opacity:0}}
+.gc-paper{position:relative; width:min(560px,86vw); min-height:340px; max-height:calc(100% - 80px); display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+  padding:56px 30px 44px; color:var(--gc-paper-ink); text-align:center; border-radius:4px;
+  background:repeating-linear-gradient(180deg, transparent 0 33px, var(--gc-paper-line) 33px 34px), var(--gc-paper);
+  box-shadow:0 24px 50px rgba(0,0,0,.35); rotate:-1.5deg}
+.gc-paper::before{content:""; position:absolute; left:34px; top:0; bottom:0; width:2px; background:rgba(240,110,130,.35)}
+.gc-paper.unroll{display:flex; animation:gc-unroll .75s cubic-bezier(.25,.8,.3,1) forwards}
+@keyframes gc-unroll{0%{clip-path:inset(0 0 100% 0); transform:translateY(-30px) scale(.9)} 100%{clip-path:inset(0 0 0 0); transform:none}}
+.gc-roll{position:absolute; left:-6px; right:-6px; height:22px; border-radius:11px; top:0; display:none;
+  background:linear-gradient(180deg,#e9e4d4,#fffdf5 40%,#d8d1bf); box-shadow:0 4px 6px rgba(0,0,0,.25)}
+.gc-paper.unroll .gc-roll{display:block; animation:gc-rollmove .75s cubic-bezier(.25,.8,.3,1) forwards}
+@keyframes gc-rollmove{0%{top:-6px} 95%{top:calc(100% - 16px); opacity:1} 100%{top:calc(100% - 16px); opacity:0}}
+/* 줄은 띄어쓰기에서만 바꾸고(낱말 중간에서 끊지 않음), 줄 길이를 고르게 */
+.gc-ptext{font-family:var(--gc-display); font-weight:400; line-height:1.2; margin:0; width:100%; word-break:keep-all; overflow-wrap:normal; text-wrap:balance; transform:scale(.3); opacity:0}
+.gc-ptext.pop{animation:gc-pop .5s cubic-bezier(.2,1.6,.4,1) forwards}
+@keyframes gc-pop{to{transform:scale(1); opacity:1}}
+.gc-stamp{position:absolute; right:14px; top:12px; font-family:var(--gc-display); color:var(--gc-stamp); border:3px solid var(--gc-stamp); border-radius:10px;
+  padding:2px 10px; font-size:22px; rotate:14deg; opacity:0; transform:scale(2.4)}
+.gc-stamp.hit{animation:gc-stamp .35s cubic-bezier(.5,0,.6,1.4) forwards}
+@keyframes gc-stamp{to{opacity:.9; transform:scale(1)}}
+.gc-paper.pen .gc-stamp{rotate:-12deg}
+.gc-paper.shake{animation:gc-shake .5s ease-in-out}
+@keyframes gc-shake{20%{translate:-8px 0} 40%{translate:7px 0} 60%{translate:-5px 0} 80%{translate:3px 0}}
+.gc-storm{position:absolute; inset:0; pointer-events:none; z-index:1; opacity:0;
+  background:radial-gradient(ellipse at 50% 40%, transparent 30%, rgba(120,0,20,.55) 100%)}
+.gc-reveal.thunder .gc-storm{animation:gc-storm 1.1s ease-out forwards}
+.gc-reveal.pen .gc-rays{background:repeating-conic-gradient(from 0deg, rgba(255,90,90,.28) 0 10deg, transparent 10deg 22deg)}
+@keyframes gc-storm{0%{opacity:0; background-color:transparent} 6%{opacity:1; background-color:rgba(255,255,255,.85)} 14%{opacity:1; background-color:transparent}
+  22%{background-color:rgba(255,255,255,.6)} 30%{background-color:transparent} 100%{opacity:.85}}
+.gc-reveal.thunder .gc-rstage{animation:gc-quake .7s cubic-bezier(.36,.07,.19,.97)}
+@keyframes gc-quake{10%,90%{translate:-2px 1px} 20%,80%{translate:5px -2px} 30%,50%,70%{translate:-9px 3px} 40%,60%{translate:9px -3px}}
+.gc-stamp.slam{animation:gc-slam .3s cubic-bezier(.6,0,.8,1.6) forwards}
+@keyframes gc-slam{0%{opacity:0; transform:scale(4)} 100%{opacity:.95; transform:scale(1.15)}}
+.gc-ractions{position:absolute; bottom:0; display:flex; gap:10px; opacity:0; transition:opacity .3s; z-index:4}
+.gc-reveal.done .gc-ractions{opacity:1}
+.gc-btn{font-family:var(--gc-display); font-size:17px; padding:10px 22px; border-radius:999px; border:0; cursor:pointer}
+.gc-btn--primary{background:var(--gc-accent); color:#fff; box-shadow:0 4px 0 var(--gc-accent-deep)}
+.gc-btn--ghost{background:rgba(255,255,255,.92); color:#2b2530}
+.gc-btn:active{transform:translateY(2px)}
+.gc-btn[hidden]{display:none}
+
+@media (prefers-reduced-motion: reduce){
+  .gc-rays, .gacha-chip, .gc-pull.ready{animation:none}
+}
+
+/* ---------- 관리자: 뽑기 탭 ---------- */
+.gacha-admin h4{ margin: 4px 0 8px; font-size:1rem; }
+/* 뽑기 설정: 탭(뽑기 이름들)이 아래 회색 상자에 붙어 있고, 상자 안에 그 뽑기의 이름과 항목 */
+.gacha-sets{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:2px; }
+.gacha-set-chip{ border:0; border-radius:10px 10px 0 0; padding:8px 14px; background:transparent; cursor:pointer; font: inherit; font-size:.9rem; color: var(--ink-soft); }
+.gacha-set-chip:hover{ color: var(--ink); }
+.gacha-set-chip.is-active{ background: var(--paper); color: var(--ink); font-weight:700; }
+.gacha-set-chip--add{ width:34px; padding:8px 0; font-size:1rem; }
+.gacha-set-card{ background: var(--paper); border-radius: 0 12px 12px 12px; padding:14px; }
+.gacha-set-chip.is-active:not(.gacha-set-chip--edit){ cursor:text; }
+.gacha-set-chip--edit{ max-width:16em; min-width:4em; outline:none; box-shadow: inset 0 -2px 0 var(--gold); font-weight:700; color: var(--ink); }
+/* 삭제는 상자 오른쪽 위에 작게 — 당첨/벌칙 토글과 같은 줄에 겹쳐 놓는다 */
+.gacha-set-card{ position:relative; }
+.gacha-set-head{ position:absolute; top:12px; right:12px; display:flex; align-items:center; gap:6px; }
+.gacha-set-status{ font-size:.78rem; color: var(--green-ink); }
+.gacha-set-delete{ border:0; background:transparent; color: var(--ink-soft); font: inherit; font-size:.8rem; cursor:pointer; padding:4px 6px; border-radius:6px; }
+.gacha-set-delete:hover{ color: var(--red-ink); background: var(--card); }
+.gacha-set-delete[hidden]{ display:none; }
+/* 회색 상자 안에서는 토글·항목을 흰색으로 */
+.gacha-set-card .gacha-kind{ background: var(--card); }
+.gacha-set-card .gacha-items li{ background: var(--card); }
+.gacha-log__set{ font-size:.75rem; color: var(--ink-soft); }
+.gacha-admin section + section{ margin-top:22px; padding-top:18px; border-top:1px solid var(--rule-soft); }
+.gacha-kind{ display:inline-grid; grid-template-columns:1fr 1fr; gap:4px; padding:3px; border-radius:12px; background: var(--paper); margin-bottom:8px; }
+.gacha-kind label{ cursor:pointer; margin:0; }
+.gacha-kind input{ position:absolute; opacity:0; pointer-events:none; }
+.gacha-kind span{ display:block; padding:6px 16px; border-radius:9px; font-weight:600; font-size:.9rem; color: var(--ink-soft); }
+.gacha-kind input:checked + span{ background:#ec5a6f; color:#fff; }
+.gacha-kind input[value=pen]:checked + span{ background:#2b2530; }
+.gacha-kind input:focus-visible + span{ outline:2px solid var(--gold); outline-offset:2px; }
+.gacha-add{ display:flex; gap:8px; }
+.gacha-add input{ flex:1; min-width:0; }
+.gacha-items{ list-style:none; margin:10px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:6px; }
+.gacha-items li{ display:inline-flex; align-items:center; gap:6px; padding:5px 6px 5px 10px; border-radius:999px; background: var(--paper); font-size:.9rem; }
+.gacha-tag{ font-size:.7rem; font-weight:700; color:#fff; border-radius:999px; padding:1px 7px; background:#ec5a6f; }
+.gacha-tag.is-pen{ background:#2b2530; }
+.gacha-items button{ width:24px; height:24px; border:0; border-radius:50%; background:transparent; color: var(--ink-soft); cursor:pointer; font-size:1rem; line-height:1; }
+.gacha-items button:hover{ background: var(--rule-soft); color: var(--ink); }
+/* 회원이 많아도 한눈에 — 작은 칸을 여러 줄로 (폰에서는 2칸) */
+.gacha-tokens{ display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:6px; }
+.gacha-token-row{ display:flex; align-items:center; gap:4px; padding:4px 6px 4px 10px; border-radius:9px; background: var(--paper); font-size:.88rem; }
+.gacha-token-row__name{ flex:1; min-width:0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gacha-token-row__name small{ font-weight:400; color: var(--ink-soft); }
+.gacha-step{ flex:none; width:24px; height:24px; border-radius:50%; border:0; background: var(--card); box-shadow: var(--btn-shadow); cursor:pointer; font-size:.9rem; line-height:1; color: var(--ink); padding:0; }
+.gacha-step:disabled{ opacity:.35; cursor:default; }
+.gacha-token-row__count{ min-width:1.6em; text-align:center; font-weight:700; font-variant-numeric: tabular-nums; }
+.gacha-token-row.has-tokens{ background:#fff1e3; }
+.gacha-token-row.has-tokens .gacha-token-row__count{ color:#d9680a; }
+@media (max-width: 380px){ .gacha-tokens{ grid-template-columns: 1fr 1fr; } }
+.gacha-log{ list-style:none; margin:0; padding:0; font-size:.88rem; }
+.gacha-log li{ display:flex; align-items:center; gap:10px; padding:6px 2px; border-bottom:1px solid var(--rule-soft); }
+.gacha-log__item{ flex:1; min-width:0; }
+.gacha-log__del{ flex:none; width:26px; height:26px; border:0; border-radius:50%; background:transparent; color: var(--ink-soft); cursor:pointer; font-size:1rem; line-height:1; }
+.gacha-log__del:hover{ background: var(--rule-soft); color: var(--ink); }
+.gacha-log time{ color: var(--ink-soft); white-space:nowrap; }
+.gacha-log b{ white-space:nowrap; }

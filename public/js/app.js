@@ -62,6 +62,8 @@ function showView(id){
   if (id === "view-mypilsa"){ weekOffset = weekOffset || 0; renderWeek(); }
   if (id === "view-memo") renderMemo();
   if (id === "view-admin") renderAdmin();
+  // gacha.js — 화면을 옮길 때마다 남은 뽑기 기회를 다시 확인 (첫 화면은 gacha.js가 읽힌 뒤 직접 확인)
+  if (typeof refreshGachaChip === "function") refreshGachaChip();
 }
 
 /* ---------- 회원가입 모달 ---------- */
@@ -1315,7 +1317,7 @@ async function openMemoReview(){
       ? (await api("/memorize?tests=1")).tests
       : ((memoData = await api("/memorize")).myTests || []);
   } catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
-  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">아직 기록이 없어요.</p>`; return; }
+  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : "아직 기록이 없어요."}</p>`; return; }
 
   // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
   const chapters = [...new Set(memoReviewTests.map(t => t.chapter))];
@@ -1430,7 +1432,7 @@ document.getElementById("btn-memo-send-result").addEventListener("click", async 
     await api("/memorize", { method: "POST", body: { action: "sendResult", name: t.name, at: t.at } });
     t.sent = new Date().toISOString();
     btn.textContent = "결과 보냄 ✓";
-    // 보내고 나면 시험 결과 목록으로 돌아간다 (새로 불러와서 "결과 보냄" 표시까지)
+    // 보내고 나면 시험 결과 목록으로 돌아간다 — 보낸 시험은 채점자 목록에서 빠진다 (본인의 시험 결과에는 남음)
     await openMemoReview();
   } catch (err) {
     btn.disabled = false;
@@ -1811,11 +1813,6 @@ async function loadAdminMemoPlan(){
   try { memoData = await api("/memorize"); }
   catch (err){ statusEl.textContent = err.message; return; }
   statusEl.textContent = "";
-  document.getElementById("memoplan-start-date").value = memoData.startDate || "";
-  const chapterSel = document.getElementById("memoplan-start-chapter");
-  chapterSel.innerHTML = REVELATION.verses.map((_, i) => `<option value="${i + 1}">${i + 1}장</option>`).join("");
-  chapterSel.value = memoData.startChapter;
-  renderMemoPlanPreview(memoData.startDate, memoData.startChapter);
   document.getElementById("memo-strict").checked = memoStrictOn();
   document.getElementById("memo-strict-status").textContent = "";
 
@@ -1874,58 +1871,86 @@ document.getElementById("memo-strict").addEventListener("change", async e => {
   }
 });
 
-function renderMemoPlanPreview(startDate, startChapter){
-  const el = document.getElementById("memoplan-preview");
-  if (!startDate){ el.innerHTML = ""; return; }
-
-  // 첫날(평일 기간에 시작일이 주말이면 다음 월요일). 마지막 날은 계산식 대신 실제 배정을 따라가며 찾는다
-  let first = startDate;
-  while (!getMemoVerseForDate(first, startDate, startChapter)) first = addDays(first, 1);
-  let last = first;
-  for (let remaining = REVELATION_SEQUENCE.length - 1; remaining > 0; ){
-    last = addDays(last, 1);
-    if (getMemoVerseForDate(last, startDate, startChapter)) remaining--;
-  }
-  const label = date => { const v = getMemoVerseForDate(date, startDate, startChapter); return `${v.chapter}장 ${v.verse}절`; };
-
-  // 이번 주(시작 전이면 시작하는 주)부터 2주, 일~토 7칸 — 평일만 하던 기간은 주말이 "-", 매일 기간은 7칸 모두 채워진다
-  const thisSunday = toISODate(startOfWeek(new Date()));
-  const firstSunday = addDays(first, -new Date(first + "T00:00:00").getDay());
-  const fromSunday = firstSunday > thisSunday ? firstSunday : thisSunday;
-  const rows = [0, 1].map(week => {
-    const cells = MEMO_DAY_LABELS.map((_, i) => {
-      const v = getMemoVerseForDate(addDays(fromSunday, week * 7 + i), startDate, startChapter);
-      return `<td>${v ? `${v.chapter}:${v.verse}` : "-"}</td>`;
-    }).join("");
-    return `<tr><td>${addDays(fromSunday, week * 7).slice(5)}~</td>${cells}</tr>`;
-  }).join("");
-
-  el.innerHTML = `
-    <table class="week-table" style="margin-top:14px;">
-      <tr><th>주</th>${MEMO_DAY_LABELS.map(d => `<th>${d}</th>`).join("")}</tr>${rows}
-    </table>
-    <p class="form-note">앞으로 2주 미리보기입니다. 총 ${REVELATION_SEQUENCE.length}절 — ${first}에 ${label(first)}로 시작해 ${last}에 ${label(last)}로 끝나요.</p>`;
+/* ---------- 관리자: 시험 결과 관리 ---------- */
+// 이름 목록 → 그 사람이 "시험 결과"에서 보는 기록들(관리자는 지울 수 있음) → 채점된 결과
+let memoAdminTests = [], memoAdminName = null;
+function memoAdminShow(step){ // names | list | detail
+  ["names", "list", "detail"].forEach(s => document.getElementById(`memo-admin-${s}`).hidden = s !== step);
+  const back = document.getElementById("btn-memo-admin-back");
+  back.hidden = step === "names";
+  back.textContent = step === "detail" ? "‹ 목록" : "‹ 이름";
 }
-
-document.getElementById("btn-memoplan-save").addEventListener("click", async () => {
-  const startDate = document.getElementById("memoplan-start-date").value;
-  const startChapter = Number(document.getElementById("memoplan-start-chapter").value);
-  const statusEl = document.getElementById("memoplan-status");
-  const btn = document.getElementById("btn-memoplan-save");
-  if (!startDate){ statusEl.textContent = "시작일을 선택해주세요."; return; }
-
-  btn.disabled = true;
-  statusEl.textContent = "저장 중…";
+async function loadAdminMemoTests(){
+  memoAdminShow("names");
+  document.getElementById("memo-admin-title").textContent = "시험 결과 관리";
+  const el = document.getElementById("memo-admin-names");
+  el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  let d;
+  try { d = await api("/memorize?all=1"); }
+  catch (err){ el.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
+  memoAdminTests = d.tests;
+  const counts = {};
+  memoAdminTests.forEach(t => counts[t.name] = (counts[t.name] || 0) + 1);
+  // 회원 순서대로, 기록이 있는 사람만 (회원 목록에 없는 이름은 맨 뒤에)
+  const members = (d.users || []).map(u => u.name);
+  const names = [...members.filter(n => counts[n]), ...Object.keys(counts).filter(n => !members.includes(n))];
+  el.innerHTML = names.length
+    ? names.map(n => `<button type="button" class="memo-admin-name" data-name="${escapeHtml(n)}">${escapeHtml(n)} <small>${counts[n]}</small></button>`).join("")
+    : `<p class="form-note">아직 시험 기록이 없어요.</p>`;
+}
+document.getElementById("memo-admin-names").addEventListener("click", e => {
+  const b = e.target.closest(".memo-admin-name");
+  if (b) openAdminMemoPerson(b.dataset.name);
+});
+function memoTimeText(iso){
+  const d = new Date(iso);
+  return isNaN(d) ? "" : `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+async function openAdminMemoPerson(name){
+  memoAdminName = name;
+  memoAdminShow("list");
+  document.getElementById("memo-admin-title").textContent = name;
+  const el = document.getElementById("memo-admin-list");
+  const mine = memoAdminTests.filter(t => t.name === name);
+  if (!mine.length){ el.innerHTML = `<p class="form-note">기록이 없어요.</p>`; return; }
+  el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
+  await Promise.all([...new Set(mine.map(t => t.chapter))].map(c => getRevelationChapterText(c).catch(() => [])));
+  el.innerHTML = mine.map(t => {
+    const { ok, wrong } = scoreMemoTest(t);
+    const state = !t.sent ? "채점 대기" : t.seen ? "결과 확인함" : "결과 보냄";
+    return `
+      <div class="memo-admin-row" data-at="${escapeHtml(t.at)}">
+        <button type="button" class="memo-review-item memo-review-item--mine">
+          <span class="memo-review-item__name">${t.chapter}장 ${t.from}~${t.to}절<span class="memo-review-item__date">${memoTimeText(t.at)}</span> <small class="memo-admin-state">${state}</small></span>
+          <span class="memo-review-item__score">⭕ ${ok} · ❌ ${wrong}</span>
+        </button>
+        <button type="button" class="memo-admin-del" aria-label="이 기록 지우기">×</button>
+      </div>`;
+  }).join("");
+}
+document.getElementById("memo-admin-list").addEventListener("click", async e => {
+  const row = e.target.closest(".memo-admin-row");
+  if (!row) return;
+  const t = memoAdminTests.find(x => x.name === memoAdminName && x.at === row.dataset.at);
+  if (!t) return;
+  if (!e.target.closest(".memo-admin-del")){ openAdminMemoDetail(t); return; }
+  if (!(await showConfirmModal(`${t.name}님의 ${t.chapter}장 ${t.from}~${t.to}절 기록을 지울까요?`, "지우기"))) return;
   try {
-    await api("/memorize", { method: "POST", body: { action: "setStartDate", startDate, startChapter } });
-    if (memoData){ memoData.startDate = startDate; memoData.startChapter = startChapter; }
-    statusEl.textContent = "저장 완료.";
-    renderMemoPlanPreview(startDate, startChapter);
-  } catch (err) {
-    statusEl.textContent = err.message;
-  } finally {
-    btn.disabled = false;
-  }
+    await api("/memorize", { method: "POST", body: { action: "deleteTest", name: t.name, at: t.at } });
+    memoAdminTests = memoAdminTests.filter(x => x !== t);
+    openAdminMemoPerson(memoAdminName);
+  } catch (err){ showAlertModal(err.message); }
+});
+function openAdminMemoDetail(t){
+  memoAdminShow("detail");
+  document.getElementById("memo-admin-detail-title").textContent = `${REVELATION.book} ${t.chapter}장 ${t.from}~${t.to}절`;
+  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t, memoTextCache[t.chapter] || []);
+  document.getElementById("memo-admin-rows").innerHTML = rowsHTML;
+  document.getElementById("memo-admin-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped);
+}
+document.getElementById("btn-memo-admin-back").addEventListener("click", () => {
+  if (!document.getElementById("memo-admin-detail").hidden) openAdminMemoPerson(memoAdminName);
+  else loadAdminMemoTests();
 });
 
 /* ===========================================================
@@ -1935,9 +1960,11 @@ document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(b => b.classList.remove("is-active"));
     btn.classList.add("is-active");
-    ["members","assign","content","memoplan"].forEach(t =>
+    ["members","content","memoplan","memotests","gacha"].forEach(t =>
       document.getElementById(`admin-${t}`).hidden = t !== btn.dataset.adminTab);
     if (btn.dataset.adminTab === "content") jumpToFirstEmptyChapter();
+    if (btn.dataset.adminTab === "memotests") loadAdminMemoTests();
+    if (btn.dataset.adminTab === "gacha") loadAdminGacha(); // gacha.js
   });
 });
 
@@ -1991,9 +2018,6 @@ async function renderAdmin(){
   catch (err){ membersEl.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
 
   renderAdminMembers(data.users);
-  document.getElementById("assign-start-date").value = data.startDate || "";
-  renderAssignPreview(data.startDate);
-  document.getElementById("assign-open-until").value = data.openUntil || "";
   loadAdminMemoPlan();
 }
 
@@ -2116,50 +2140,6 @@ function initMemberDragReorder(container){
       document.addEventListener("pointerup", onPointerUp);
     });
   });
-}
-
-document.getElementById("btn-assign-save").addEventListener("click", async () => {
-  const val = document.getElementById("assign-start-date").value;
-  if (!val) return alert("시작일을 선택해주세요.");
-  try {
-    await api("/admin", { method: "POST", body: { action: "setStartDate", startDate: val } });
-    renderAssignPreview(val);
-  } catch (err) { alert(err.message); }
-});
-
-document.getElementById("assign-open-until").addEventListener("change", async e => {
-  const input = e.target;
-  const openUntil = input.value; // 비우면 기본값(이번 주까지)으로 되돌아감
-  input.disabled = true;
-  try {
-    await api("/admin", { method: "POST", body: { action: "setOpenUntil", openUntil } });
-  } catch (err) {
-    alert(err.message);
-    renderAdmin(); // 실패 시 서버 값으로 되돌림
-  } finally {
-    input.disabled = false;
-  }
-});
-
-function renderAssignPreview(startDate){
-  const el = document.getElementById("assign-preview");
-  if (!startDate){ el.innerHTML = ""; return; }
-  // 이번 주 일요일(시작 전이면 시작일)부터 2주 — 주말처럼 배정이 없는 날은 "-"
-  const thisSunday = toISODate(startOfWeek(new Date()));
-  const from = startDate > thisSunday ? startDate : thisSunday;
-  const dayLabels = ["일","월","화","수","목","금","토"];
-  const rows = Array.from({ length: 14 }, (_, i) => {
-    const date = addDays(from, i);
-    const dayIndex = dateToDayIndex(date, startDate);
-    const label = dayIndex === null ? "-" : formatAssignmentLabel(getAssignmentForDayIndex(dayIndex));
-    return `<tr><td>${date} (${dayLabels[new Date(date + "T00:00:00").getDay()]})</td><td>${label}</td></tr>`;
-  }).join("");
-  const lastDate = dayIndexToDate(CHAPTER_SEQUENCE.length - 1, startDate);
-  el.innerHTML = `
-    <table class="week-table" style="margin-top:14px;">
-      <tr><th>날짜</th><th>배정 장</th></tr>${rows}
-    </table>
-    <p class="form-note">앞으로 2주 미리보기입니다. 총 ${CHAPTER_SEQUENCE.length}장 — ${lastDate}에 유다서 1장으로 끝나요.</p>`;
 }
 
 /* ---------- 관리자: 본문 입력 ---------- */

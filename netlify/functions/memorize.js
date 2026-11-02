@@ -12,19 +12,28 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 //        (전체화면 필수 · 다른 화면에 다녀오면 답 지우기 · 분할 화면 막기)
 // POST { action: "setReview", on, reviewer }         → 관리자 전용, 범위 암기 테스트를 채점자 한 명에게 보내기 켜기/끄기와 채점자 지정
 // POST { action: "submitTest", chapter, from, to, answers: [{ verse, text }] } → 채점자에게 보내기가 켜져 있을 때 테스트 제출 (시험 결과에 남는다)
-// GET  ?tests=1                                       → 지정된 채점자만: 모든 사람이 제출한 테스트 목록
+// GET  ?tests=1                                       → 지정된 채점자만: 아직 결과를 보내지 않은 테스트 목록 (보낸 것은 채점자 목록에서 빠짐)
 // POST { action: "sendResult", name, at }            → 채점자만: 그 사람에게 채점 결과 보내기
 // POST { action: "ackResults", ats: [제출시각…] }     → 본인: 받은 결과를 확인함 (기록은 남기고 "확인" 표시만)
+// GET  ?all=1                                        → 관리자: 모든 사람의 시험 기록 (시험 결과 관리)
+// POST { action: "deleteTest", name, at }            → 관리자: 시험 기록 하나 지우기
 // GET 응답의 myTests: 내 시험 결과 — pending이면 채점자에게 제출하고 결과를 기다리는 중, seen이 비어 있으면 받은 결과를 아직 열어 보지 않은 것
 exports.handler = async (event) => {
   try {
+    if (event.httpMethod === "GET" && (event.queryStringParameters || {}).all){
+      requireAdmin(event);
+      const [tests, users] = await Promise.all([store.getMemoTests(), store.getUsers()]);
+      const approved = users.filter(u => u.status === "approved").map(u => ({ name: u.name, nickname: u.nickname || "" }));
+      return json(200, { tests, users: approved });
+    }
+
     if (event.httpMethod === "GET" && (event.queryStringParameters || {}).tests){
       const user = requireUser(event);
       const config = await store.getConfig();
       if (config.memo_review_on !== "1" || !config.memo_reviewer || user.name !== config.memo_reviewer){
         return json(403, { error: "채점자로 지정된 사람만 볼 수 있어요." });
       }
-      return json(200, { tests: await store.getMemoTests() });
+      return json(200, { tests: (await store.getMemoTests()).filter(t => !t.sent) });
     }
 
     if (event.httpMethod === "GET"){
@@ -63,6 +72,13 @@ exports.handler = async (event) => {
       const user = requireUser(event);
       if (!isValidRevelationVerse(chapter, verse)) return json(400, { error: "잘못된 요청이에요." });
       await store.setMemoCheck(user.name, chapter, verse, !!done);
+      return json(200, { ok: true });
+    }
+
+    if (action === "deleteTest"){
+      requireAdmin(event);
+      const ok = await store.deleteMemoTest(String(name || ""), String(at || ""));
+      if (!ok) return json(404, { error: "기록을 찾을 수 없어요. 새로고침 후 다시 해주세요." });
       return json(200, { ok: true });
     }
 
