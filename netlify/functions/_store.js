@@ -11,9 +11,9 @@
 //   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
 //   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
 //   GachaSets:   번호 | 이름                    (뽑기 종류 — 비어 있으면 1번 "기본" 하나가 있는 것으로 본다)
-//   GachaItems:  종류(당첨/벌칙) | 항목 | 뽑기번호  (뽑기 기계에 넣을 항목 — 뽑기번호가 비어 있으면 1번)
+//   GachaItems:  종류(당첨/벌칙/사랑) | 항목 | 뽑기번호  (뽑기 기계에 넣을 항목 — 뽑기번호가 비어 있으면 1번)
 //   GachaTokens: 이름 | 남은 횟수 | 뽑기번호     (관리자가 준 뽑기 기회 — 뽑기번호가 비어 있으면 1번)
-//   GachaLog:    이름 | 시각 | 항목 | 종류 | 뽑기 이름  (누가 언제 무엇을 뽑았는지)
+//   GachaLog:    이름 | 시각 | 항목 | 종류 | 뽑기 이름 | 사용  (누가 언제 무엇을 뽑았는지 — 관리자가 사용 처리하면 "사용"에 시각)
 //   ※ Gacha 탭들도 없으면 처음 쓸 때 자동 생성
 
 const { getSheetsClient, SHEET_ID } = require("./_sheets");
@@ -277,7 +277,7 @@ const MEMO_SHEETS = {
   GachaSets: ["번호", "이름"],
   GachaItems: ["종류", "항목", "뽑기번호"],
   GachaTokens: ["이름", "남은 횟수", "뽑기번호"],
-  GachaLog: ["이름", "시각", "항목", "종류", "뽑기 이름"],
+  GachaLog: ["이름", "시각", "항목", "종류", "뽑기 이름", "사용"],
 };
 
 function isMissingSheetError(err){
@@ -435,7 +435,8 @@ async function withSheet(sheets, title, fn){
   }
 }
 
-const GACHA_TYPE_LABEL = { win: "당첨", pen: "벌칙" };
+const GACHA_TYPE_LABEL = { win: "당첨", pen: "벌칙", love: "사랑" };
+const gachaTypeOf = label => label === "벌칙" ? "pen" : label === "사랑" ? "love" : "win";
 const DEFAULT_GACHA_SET = "1"; // 뽑기 종류를 나누기 전에 만든 항목·기회는 모두 1번
 
 // 표 전체를 머리글부터 다시 쓴다 (줄을 지우거나 끼워 넣을 때)
@@ -472,7 +473,7 @@ async function addGachaSet(set){
 async function getGachaItems(){
   const sheets = await getSheetsClient();
   const rows = await readMemoRows(sheets, "GachaItems!A2:C");
-  return rows.filter(r => r[1]).map(r => ({ set: String(r[2] || DEFAULT_GACHA_SET), type: r[0] === "벌칙" ? "pen" : "win", text: String(r[1]) }));
+  return rows.filter(r => r[1]).map(r => ({ set: String(r[2] || DEFAULT_GACHA_SET), type: gachaTypeOf(r[0]), text: String(r[1]) }));
 }
 
 // 한 뽑기의 항목 목록을 통째로 바꾼다 (다른 뽑기의 항목은 그대로)
@@ -546,12 +547,25 @@ async function addGachaLog(entry){
   }));
 }
 
-// 반환: [{ name, at, text, type, setName }] — 최근 것이 먼저
+// 반환: [{ name, at, text, type, setName, used }] — 최근 것이 먼저 (used: 사용 처리한 시각, 안 했으면 "")
 async function getGachaLog(limit = 50){
   const sheets = await getSheetsClient();
-  const rows = await readMemoRows(sheets, "GachaLog!A2:E");
+  const rows = await readMemoRows(sheets, "GachaLog!A2:F");
   return rows.filter(r => r[0]).slice(-limit).reverse()
-    .map(r => ({ name: r[0], at: r[1], text: r[2] || "", type: r[3] === "벌칙" ? "pen" : "win", setName: r[4] || "" }));
+    .map(r => ({ name: r[0], at: r[1], text: r[2] || "", type: gachaTypeOf(r[3]), setName: r[4] || "", used: r[5] || "" }));
+}
+
+// 뽑은 기록을 사용함 / 안 함으로 표시 (이름 + 시각으로 찾음)
+async function setGachaLogUsed(name, at, used){
+  const sheets = await getSheetsClient();
+  const rows = await readMemoRows(sheets, "GachaLog!A2:B");
+  const idx = rows.findIndex(r => r[0] === name && r[1] === at);
+  if (idx === -1) return false;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID, range: `GachaLog!F${idx + 2}`, valueInputOption: "RAW",
+    requestBody: { values: [[used ? new Date().toISOString() : ""]] },
+  });
+  return true;
 }
 
 // 뽑은 기록 한 줄 지우기 (이름 + 시각으로 찾음)
@@ -578,5 +592,5 @@ module.exports = {
   getMemoChecks, setMemoCheck,
   getMemoTests, addMemoTest, markMemoTestSent, markMemoTestsSeen, deleteMemoTest,
   getGachaSets, saveGachaSets, addGachaSet, deleteGachaSet,
-  getGachaItems, setGachaItems, getGachaTokens, setGachaTokens, addGachaLog, getGachaLog, deleteGachaLog,
+  getGachaItems, setGachaItems, getGachaTokens, setGachaTokens, addGachaLog, getGachaLog, deleteGachaLog, setGachaLogUsed,
 };

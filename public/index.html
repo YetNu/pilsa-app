@@ -391,7 +391,7 @@
         </div>
       </div>
 
-      <!-- 뽑기: 기계에 넣을 항목 + 회원별 뽑기 기회 + 최근 뽑은 기록 -->
+      <!-- 뽑기: 기계에 넣을 항목 + 회원별 뽑기 기회 + 뽑기 현황 -->
       <div class="admin-panel gacha-admin" id="admin-gacha" hidden>
         <section>
           <h4>뽑기 설정</h4>
@@ -405,6 +405,7 @@
             <div class="gacha-kind" role="radiogroup" aria-label="항목 종류">
               <label><input type="radio" name="gacha-kind" value="win" checked><span>당첨</span></label>
               <label><input type="radio" name="gacha-kind" value="pen"><span>벌칙</span></label>
+              <label><input type="radio" name="gacha-kind" value="love"><span>사랑</span></label>
             </div>
             <form class="gacha-add" id="gacha-add-form" autocomplete="off">
               <input type="text" id="gacha-new-item" maxlength="40" placeholder="항목 입력 (쉼표로 여러 개)">
@@ -420,7 +421,7 @@
           <div class="gacha-tokens" id="gacha-tokens"></div>
         </section>
         <section>
-          <h4>최근 뽑은 기록</h4>
+          <h4>뽑기 현황</h4>
           <ul class="gacha-log" id="gacha-log"></ul>
         </section>
       </div>

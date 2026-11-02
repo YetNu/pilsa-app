@@ -166,6 +166,8 @@
 .gc-storm{position:absolute; inset:0; pointer-events:none; z-index:1; opacity:0;
   background:radial-gradient(ellipse at 50% 40%, transparent 30%, rgba(120,0,20,.55) 100%)}
 .gc-reveal.thunder .gc-storm{animation:gc-storm 1.1s ease-out forwards}
+.gc-paper.love .gc-stamp{color:#e2508f; border-color:#e2508f; rotate:-8deg}
+.gc-reveal.love .gc-rays{background:repeating-conic-gradient(from 0deg, rgba(255,150,200,.34) 0 10deg, transparent 10deg 22deg)}
 .gc-reveal.pen .gc-rays{background:repeating-conic-gradient(from 0deg, rgba(255,90,90,.28) 0 10deg, transparent 10deg 22deg)}
 @keyframes gc-storm{0%{opacity:0; background-color:transparent} 6%{opacity:1; background-color:rgba(255,255,255,.85)} 14%{opacity:1; background-color:transparent}
   22%{background-color:rgba(255,255,255,.6)} 30%{background-color:transparent} 100%{opacity:.85}}
@@ -208,12 +210,13 @@
 .gacha-set-card .gacha-items li{ background: var(--card); }
 .gacha-log__set{ font-size:.75rem; color: var(--ink-soft); }
 .gacha-admin section + section{ margin-top:22px; padding-top:18px; border-top:1px solid var(--rule-soft); }
-.gacha-kind{ display:inline-grid; grid-template-columns:1fr 1fr; gap:4px; padding:3px; border-radius:12px; background: var(--paper); margin-bottom:8px; }
+.gacha-kind{ display:inline-grid; grid-template-columns:1fr 1fr 1fr; gap:4px; padding:3px; border-radius:12px; background: var(--paper); margin-bottom:8px; }
 .gacha-kind label{ cursor:pointer; margin:0; }
 .gacha-kind input{ position:absolute; opacity:0; pointer-events:none; }
 .gacha-kind span{ display:block; padding:6px 16px; border-radius:9px; font-weight:600; font-size:.9rem; color: var(--ink-soft); }
 .gacha-kind input:checked + span{ background:#ec5a6f; color:#fff; }
 .gacha-kind input[value=pen]:checked + span{ background:#2b2530; }
+.gacha-kind input[value=love]:checked + span{ background:#ff6fae; }
 .gacha-kind input:focus-visible + span{ outline:2px solid var(--gold); outline-offset:2px; }
 .gacha-add{ display:flex; gap:8px; }
 .gacha-add input{ flex:1; min-width:0; }
@@ -221,6 +224,7 @@
 .gacha-items li{ display:inline-flex; align-items:center; gap:6px; padding:5px 6px 5px 10px; border-radius:999px; background: var(--paper); font-size:.9rem; }
 .gacha-tag{ font-size:.7rem; font-weight:700; color:#fff; border-radius:999px; padding:1px 7px; background:#ec5a6f; }
 .gacha-tag.is-pen{ background:#2b2530; }
+.gacha-tag.is-love{ background:#ff6fae; }
 .gacha-items button{ width:24px; height:24px; border:0; border-radius:50%; background:transparent; color: var(--ink-soft); cursor:pointer; font-size:1rem; line-height:1; }
 .gacha-items button:hover{ background: var(--rule-soft); color: var(--ink); }
 /* 회원이 많아도 한눈에 — 작은 칸을 여러 줄로 (폰에서는 2칸) */
@@ -237,6 +241,12 @@
 .gacha-log{ list-style:none; margin:0; padding:0; font-size:.88rem; }
 .gacha-log li{ display:flex; align-items:center; gap:10px; padding:6px 2px; border-bottom:1px solid var(--rule-soft); }
 .gacha-log__item{ flex:1; min-width:0; }
+.gacha-log__use{ flex:none; border:1px solid var(--rule); border-radius:999px; background: var(--card); color: var(--ink-soft); font: inherit; font-size:.75rem; font-weight:600; padding:3px 10px; cursor:pointer; white-space:nowrap; }
+.gacha-log__use:hover{ border-color: var(--ink-soft); color: var(--ink); }
+.gacha-log li.is-used .gacha-log__use{ background: var(--green-ink); border-color: var(--green-ink); color:#fff; }
+/* 사용한 기록은 흐리게 + 항목에 줄 */
+.gacha-log li.is-used time, .gacha-log li.is-used b, .gacha-log li.is-used .gacha-log__item{ opacity:.5; }
+.gacha-log li.is-used .gacha-log__item{ text-decoration: line-through; }
 .gacha-log__del{ flex:none; width:26px; height:26px; border:0; border-radius:50%; background:transparent; color: var(--ink-soft); cursor:pointer; font-size:1rem; line-height:1; }
 .gacha-log__del:hover{ background: var(--rule-soft); color: var(--ink); }
 .gacha-log time{ color: var(--ink-soft); white-space:nowrap; }

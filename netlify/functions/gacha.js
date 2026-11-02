@@ -15,6 +15,7 @@ const { requireUser, requireAdmin } = require("./_auth");
 // POST { action: "setItems", set, items: [{ type, text }] } → 관리자: 그 뽑기의 항목 목록을 통째로 바꿈
 // POST { action: "setTokens", set, name, count }        → 관리자: 그 회원의 그 뽑기 남은 기회를 count로
 // POST { action: "deleteLog", name, at }                → 관리자: 뽑은 기록 한 줄 지우기
+// POST { action: "setLogUsed", name, at, used }         → 관리자: 뽑은 기록을 사용함 / 안 함으로 표시
 const MAX_ITEMS = 100, MAX_TEXT = 40, MAX_TOKENS = 99, MAX_SETS = 20, MAX_SET_NAME = 20;
 
 exports.handler = async (event) => {
@@ -34,7 +35,7 @@ exports.handler = async (event) => {
     }
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
-    const { action, set, items, name, count, at, id: wantId } = JSON.parse(event.body || "{}");
+    const { action, set, items, name, count, at, used, id: wantId } = JSON.parse(event.body || "{}");
     const setId = String(set || "");
     const findSet = async () => (await store.getGachaSets()).find(x => x.id === setId);
     const cleanName = n => String(n || "").trim().slice(0, MAX_SET_NAME);
@@ -93,7 +94,7 @@ exports.handler = async (event) => {
       if (!(await findSet())) return json(404, { error: "없어진 뽑기예요. 새로고침 후 다시 해주세요." });
       if (!Array.isArray(items) || items.length > MAX_ITEMS) return json(400, { error: `항목은 ${MAX_ITEMS}개까지 넣을 수 있어요.` });
       const clean = items
-        .map(it => ({ type: it && it.type === "pen" ? "pen" : "win", text: String((it && it.text) || "").trim().slice(0, MAX_TEXT) }))
+        .map(it => ({ type: it && ["pen", "love"].includes(it.type) ? it.type : "win", text: String((it && it.text) || "").trim().slice(0, MAX_TEXT) }))
         .filter(it => it.text);
       await store.setGachaItems(setId, clean);
       return json(200, { ok: true, items: clean });
@@ -108,6 +109,13 @@ exports.handler = async (event) => {
       if (!users.some(u => u.name === name && u.status === "approved")) return json(404, { error: "회원을 찾을 수 없어요." });
       await store.setGachaTokens(setId, name, n);
       return json(200, { ok: true, name, count: n });
+    }
+
+    if (action === "setLogUsed"){
+      requireAdmin(event);
+      const ok = await store.setGachaLogUsed(String(name || ""), String(at || ""), !!used);
+      if (!ok) return json(404, { error: "기록을 찾을 수 없어요. 새로고침 후 다시 해주세요." });
+      return json(200, { ok: true });
     }
 
     if (action === "deleteLog"){
