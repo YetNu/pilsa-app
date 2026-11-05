@@ -6,7 +6,8 @@
 //   Submissions: 이름 | dayIndex | 제출시각
 //   Config:      key | value   (start_date, open_until, memo_start_date, memo_start_chapter, memo_strict,
 //                                memo_review_on, memo_reviewer)
-//   MemoTests:   이름 | 제출시각 | 장 | 시작절 | 끝절 | 답안(JSON) | 보냄 | 확인  (범위 암기 테스트 기록 — 없으면 처음 쓸 때 자동 생성.
+//   MemoTests:   이름 | 제출시각 | 장 | 시작절 | 끝절 | 답안(JSON) | 보냄 | 확인 | 범위(JSON)  (범위 암기 테스트 기록 — 없으면 처음 쓸 때 자동 생성.
+//                여러 장에 걸친 시험이면 "범위"에 [{장, 시작절, 끝절}…]이 들어가고, 장·시작절·끝절은 첫 범위, 답안마다 장 번호가 붙는다.
 //                채점자에게 제출하면 보냄·확인이 비어 있다가, 채점자가 결과를 보내면 "보냄", 본인이 결과를 처음 열어 보면 "확인"에 시각)
 //   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
 //   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
@@ -273,7 +274,7 @@ async function setChapterVerses(book, chapter, verses){
 // 읽을 때 탭이 없으면 빈 것으로 취급하고, 처음 쓸 때 탭과 헤더를 자동으로 만든다.
 const MEMO_SHEETS = {
   Memorize: ["이름", "장", "절", "완료", "시각"],
-  MemoTests: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인"],
+  MemoTests: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인", "범위"],
   GachaSets: ["번호", "이름"],
   GachaItems: ["종류", "항목", "뽑기번호"],
   GachaTokens: ["이름", "남은 횟수", "뽑기번호"],
@@ -353,11 +354,14 @@ async function setMemoCheck(name, chapter, verse, done){
 // (sent: 결과를 받은 시각, seen: 본인이 결과를 확인한 시각 — 없으면 "")
 async function getMemoTests(){
   const sheets = await getSheetsClient();
-  const rows = await readMemoRows(sheets, "MemoTests!A2:H");
+  const rows = await readMemoRows(sheets, "MemoTests!A2:I");
   return rows.filter(r => r[0]).map(r => {
-    let answers = [];
+    let answers = [], parts = null;
     try { answers = JSON.parse(r[5] || "[]"); } catch { /* 깨진 칸은 빈 답으로 */ }
-    return { name: r[0], at: r[1], chapter: Number(r[2]), from: Number(r[3]), to: Number(r[4]), answers, sent: r[6] || "", seen: r[7] || "" };
+    try { parts = r[8] ? JSON.parse(r[8]) : null; } catch { /* 깨진 칸은 한 장짜리로 */ }
+    const test = { name: r[0], at: r[1], chapter: Number(r[2]), from: Number(r[3]), to: Number(r[4]), answers, sent: r[6] || "", seen: r[7] || "" };
+    if (Array.isArray(parts) && parts.length > 1) test.parts = parts;
+    return test;
   }).reverse();
 }
 
@@ -412,8 +416,9 @@ async function deleteMemoTest(name, at){
 async function addMemoTest(test){
   const sheets = await getSheetsClient();
   const append = () => sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID, range: "MemoTests!A2:H", valueInputOption: "RAW",
-    requestBody: { values: [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), "", ""]] },
+    spreadsheetId: SHEET_ID, range: "MemoTests!A2:I", valueInputOption: "RAW",
+    requestBody: { values: [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), "", "",
+      test.parts && test.parts.length > 1 ? JSON.stringify(test.parts) : ""]] },
   });
   try { await append(); }
   catch (err) {

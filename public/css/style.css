@@ -549,12 +549,34 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 @media (prefers-reduced-motion: reduce){
   .memo-test-box:hover .memo-test-box__pencil, .memo-test-box:hover .memo-test-box__check{ animation:none; }
 }
-.memo-range__picker{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:.95rem; }
+.memo-range__picker{ display:flex; align-items:flex-end; flex-wrap:wrap; gap:8px 10px; font-size:.95rem; }
+.memo-range__parts{ display:flex; flex-direction:column; gap:6px; }
+.memo-range__part{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.memo-range__lead{ min-width:2.6em; display:inline-flex; justify-content:center; } /* 둘째 줄부터의 × 가 "계시록" 자리에 */
+.memo-range__start{ padding:7px 16px; } /* 제목 "암기 테스트" 바로 오른쪽 옆 (끝으로 밀지 않음) */
+.memo-range__num{
+  width:2.6em; border:none; border-bottom:1px solid var(--rule); border-radius:0; background:transparent;
+  padding:5px 2px; font-size:16px; text-align:center; color: var(--ink); outline:none;
+}
+.memo-range__num:focus{ border-bottom-color: var(--gold); }
+.memo-range__num:focus-visible{ outline:none; } /* 밑줄 색만 바뀌면 충분 — 네모 테두리는 그리지 않는다 */
+.memo-range__num::placeholder{ color: var(--rule); }
+.memo-range__picker-actions{ display:flex; align-items:center; gap:8px; }
+.memo-range__add, .memo-range__remove{
+  width:32px; height:32px; border-radius:50%; border:0; cursor:pointer; padding:0; line-height:1;
+  background: var(--card); box-shadow: var(--btn-shadow); color: var(--ink); font-size:1.05rem;
+}
+.memo-range__remove{ width:26px; height:26px; font-size:.95rem; color: var(--ink-soft); box-shadow:none; background:transparent; }
+.memo-range__remove:hover{ color: var(--red-ink); background: var(--rule-soft); }
+/* 폰: 한 줄(장·절 고르기 + ×)이 넘치지 않게 촘촘히 */
+@media (max-width: 480px){
+  .memo-range__part{ gap:5px; flex-wrap:nowrap; }
+}
 .memo-range__picker select{
   border:none; border-bottom:1px solid var(--rule); background:transparent;
   padding:5px 2px; font-size:16px; color: var(--ink); outline:none; min-width:52px;
 }
-.memo-range__picker .btn{ margin-left:6px; } /* "절" 글자 바로 오른쪽에 붙게 */
+
 .memo-range__result{ margin-top:0; }
 /* 정답 상자의 "정답" 글자는 바로 위 "N절"과 같은 왼쪽 칸에 (칸 40px + 간격 10px 만큼 왼쪽으로 빼서, 같은 높이) */
 .memo-range__answer{ position:relative; }

@@ -102,10 +102,11 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------- 확인 모달 ("정말 …할까요?") — 확인을 누르면 true, 취소/바깥/Esc면 false ---------- */
-function showConfirmModal(message, okLabel = "확인"){
+function showConfirmModal(message, okLabel = "확인", cancelLabel = "취소"){
   const modal = document.getElementById("confirm-modal");
   document.getElementById("confirm-modal-message").textContent = message;
   document.getElementById("btn-confirm-ok").textContent = okLabel;
+  document.getElementById("btn-confirm-cancel").textContent = cancelLabel;
   modal.hidden = false;
   return new Promise(resolve => {
     const close = result => {
@@ -173,11 +174,12 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
 // 필사 패널에 입력 중이던 내용은 타이핑하는 동안 계속 임시저장(draft)되기 때문에
 // (아래 draftKey/saveDraft 등 참고) 화면을 이동해도 잃어버리지 않는다 — 그래서
 // 예전에 있던 "정말 나가시겠어요?" 확인창은 더 이상 필요 없어서 제거함
-document.getElementById("btn-status").addEventListener("click", () => { statusWeekOffset = 0; memoStatusWeekOffset = 0; showView("view-status"); });
-document.getElementById("btn-mypilsa").addEventListener("click", () => { weekOffset = 0; showView("view-mypilsa"); });
-document.getElementById("btn-memo").addEventListener("click", () => { memoWeekOffset = 0; showView("view-memo"); });
-document.getElementById("btn-admin").addEventListener("click", () => showView("view-admin"));
-document.getElementById("btn-logout").addEventListener("click", () => logout());
+// 범위 암기 시험 중이면 옮기기 전에 한 번 묻는다 (confirmLeaveMemoTest — 아래 "범위 암기 테스트는 전체화면에서만" 부분)
+document.getElementById("btn-status").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; statusWeekOffset = 0; memoStatusWeekOffset = 0; showView("view-status"); });
+document.getElementById("btn-mypilsa").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; weekOffset = 0; showView("view-mypilsa"); });
+document.getElementById("btn-memo").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; memoWeekOffset = 0; showView("view-memo"); });
+document.getElementById("btn-admin").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; showView("view-admin"); });
+document.getElementById("btn-logout").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; logout(); });
 
 /* ===========================================================
    현황 페이지
@@ -931,35 +933,79 @@ document.getElementById("memo-week-prev").addEventListener("click", () => { memo
 document.getElementById("memo-week-next").addEventListener("click", () => { memoWeekOffset++; renderMemoWeekBox(); });
 
 /* ---------- 암기 테스트 (장·절 범위를 골라 필사하듯 절마다 입력) ---------- */
-let memoRange = null; // 지금 테스트 중인 범위 { chapter, verses: [{ verse, text }] }
+// 지금 테스트 중인 범위 { chapter: 첫 장, parts: [{ chapter, from, to }], verses: [{ chapter, verse, text }] }
+let memoRange = null;
 
-(function initMemoRangePicker(){
-  const chapterSel = document.getElementById("memo-range-chapter");
-  // 기본 선택은 "0장 0 ~ 0절"(아무것도 안 고른 상태) — 0은 고르기 전 자리표시용
-  chapterSel.innerHTML = `<option value="0">0</option>` +
-    REVELATION.verses.map((_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
-  chapterSel.addEventListener("change", () => fillMemoRangeVerses(0, 0));
-  // 시작 절을 끝 절보다 뒤로 고르면(끝 절이 아직 0이어도) 끝 절을 따라 옮긴다 (반대도 마찬가지)
-  document.getElementById("memo-range-from").addEventListener("change", e => {
-    const to = document.getElementById("memo-range-to");
-    if (Number(e.target.value) > Number(to.value)) to.value = e.target.value;
-  });
-  document.getElementById("memo-range-to").addEventListener("change", e => {
-    const from = document.getElementById("memo-range-from");
-    const v = Number(e.target.value);
-    if (v && (Number(from.value) === 0 || Number(from.value) > v)) from.value = e.target.value;
-  });
-})();
-
-function fillMemoRangeVerses(from, to){
-  const chapter = Number(document.getElementById("memo-range-chapter").value);
-  const count = chapter ? REVELATION.verses[chapter - 1] : 0;
-  const options = `<option value="0">0</option>` +
-    Array.from({ length: count }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
-  const fromSel = document.getElementById("memo-range-from"), toSel = document.getElementById("memo-range-to");
-  fromSel.innerHTML = options; toSel.innerHTML = options;
-  fromSel.value = from; toSel.value = to;
+/* 범위 고르기 — 줄마다 "계시록 [장] 장 : [시작] ~ [끝] 절". 0은 아직 안 고른 자리표시.
+   보통은 한 줄(한 장)이고, 장이 이어지는 날은 ＋로 다음 장 줄을 붙인다 (붙인 줄은 ×로 뺀다) */
+let memoRangeParts = [{ chapter: 0, from: 0, to: 0 }];
+function renderMemoRangeParts(){
+  // 숫자는 직접 입력 (폰에서는 숫자 자판). 0은 아직 안 적은 칸이라 비워 둔다
+  const num = (k, v, label, ph) => `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off"
+    class="memo-range__num" data-k="${k}" value="${v || ""}" placeholder="${ph}" aria-label="${label}">`;
+  document.getElementById("memo-range-parts").innerHTML = memoRangeParts.map((p, i) => `
+      <div class="memo-range__part" data-i="${i}">
+        ${i === 0 ? `<span class="memo-range__lead">계시록</span>`
+          : `<span class="memo-range__lead"><button type="button" class="memo-range__remove" aria-label="이 범위 빼기" title="이 범위 빼기">×</button></span>`}
+        ${num("chapter", p.chapter, "장", "장")}
+        <span>장 :</span>
+        ${num("from", p.from, "시작 절", "절")}
+        <span>~</span>
+        ${num("to", p.to, "끝 절", "절")}
+        <span>절</span>
+      </div>`).join("");
 }
+// 칸을 벗어날 때 맞는 숫자로 고친다 — 장은 1~22, 절은 그 장의 절 수까지, 시작 절이 끝 절보다 뒤면 서로 맞춘다
+function fixMemoRangePart(i){
+  const p = memoRangeParts[i];
+  const clamp = (v, max) => v ? Math.min(Math.max(v, 1), max) : 0;
+  p.chapter = clamp(p.chapter, REVELATION.verses.length);
+  const count = p.chapter ? REVELATION.verses[p.chapter - 1] : 99;
+  p.from = clamp(p.from, count); p.to = clamp(p.to, count);
+  if (p.from && p.to && p.from > p.to) p.to = p.from;
+  const row = document.querySelector(`.memo-range__part[data-i="${i}"]`);
+  if (row) row.querySelectorAll(".memo-range__num").forEach(inp => { inp.value = p[inp.dataset.k] || ""; });
+}
+const memoRangeBox = document.getElementById("memo-range-parts");
+memoRangeBox.addEventListener("input", e => {
+  const inp = e.target.closest(".memo-range__num"); if (!inp) return;
+  const digits = inp.value.replace(/\D/g, "");
+  if (digits !== inp.value) inp.value = digits;
+  memoRangeParts[Number(inp.closest(".memo-range__part").dataset.i)][inp.dataset.k] = Number(digits) || 0;
+});
+memoRangeBox.addEventListener("change", e => {
+  const inp = e.target.closest(".memo-range__num");
+  if (inp) fixMemoRangePart(Number(inp.closest(".memo-range__part").dataset.i));
+});
+// Enter: 다음 칸으로 (마지막 칸이면 자판을 내린다)
+memoRangeBox.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || !e.target.classList.contains("memo-range__num")) return;
+  e.preventDefault();
+  const all = [...memoRangeBox.querySelectorAll(".memo-range__num")];
+  const next = all[all.indexOf(e.target) + 1];
+  if (next){ next.focus(); next.select(); } else e.target.blur();
+});
+memoRangeBox.addEventListener("focusin", e => { if (e.target.classList.contains("memo-range__num")) e.target.select(); });
+memoRangeBox.addEventListener("click", e => {
+  const b = e.target.closest(".memo-range__remove"); if (!b) return;
+  memoRangeParts.splice(Number(b.closest(".memo-range__part").dataset.i), 1);
+  renderMemoRangeParts();
+});
+document.getElementById("btn-memo-range-add").addEventListener("click", () => {
+  // 바로 앞 줄의 다음 장 1절부터 — 끝 절만 적으면 되게 그 칸에 바로 커서 (마지막 장 다음은 없음)
+  const last = memoRangeParts[memoRangeParts.length - 1];
+  const chapter = last.chapter && last.chapter < REVELATION.verses.length ? last.chapter + 1 : 0;
+  memoRangeParts.push({ chapter, from: chapter ? 1 : 0, to: 0 });
+  renderMemoRangeParts();
+  const row = memoRangeBox.querySelector(`.memo-range__part[data-i="${memoRangeParts.length - 1}"]`);
+  row.querySelector(`[data-k="${chapter ? "to" : "chapter"}"]`).focus();
+});
+
+// 시험 범위 이름·절 이름 — 한 장짜리 예전 기록은 parts가 없어서 chapter/from/to로 만든다
+function memoPartsOf(t){ return t.parts && t.parts.length ? t.parts : [{ chapter: t.chapter, from: t.from, to: t.to }]; }
+function memoRangeLabel(parts){ return parts.map(p => `${p.chapter}장 ${p.from}~${p.to}절`).join(" + "); }
+function memoVerseLabel(multi, chapter, verse){ return multi ? `${chapter}:${verse}` : `${verse}절`; }
+function memoChaptersOf(tests){ return [...new Set(tests.flatMap(t => memoPartsOf(t).map(p => p.chapter)))]; }
 
 // 범위 암기 테스트를 채점자에게 보내는 중인지 / 내가 그 채점자인지
 function memoReviewOn(){ return !!(memoData && memoData.reviewOn); }
@@ -977,18 +1023,19 @@ function memoRangeFreshAction(){ return memoReviewOn() ? "submit" : "grade"; }
 
 function openMemoRange(){
   setMemoRangeAction(memoRangeFreshAction());
-  document.getElementById("memo-range-chapter").value = "0";
-  fillMemoRangeVerses(0, 0);
+  memoRangeParts = [{ chapter: 0, from: 0, to: 0 }];
+  renderMemoRangeParts();
   document.getElementById("memo-range-panel").hidden = true;
   memoRange = null;
   showMemoSection("range");
 }
 
 async function startMemoRange(){
-  const chapter = Number(document.getElementById("memo-range-chapter").value);
-  const from = Number(document.getElementById("memo-range-from").value);
-  const to = Number(document.getElementById("memo-range-to").value);
-  if (!chapter || !from || !to){ showAlertModal("장과 절을 선택해주세요."); return; }
+  memoRangeParts.forEach((_, i) => fixMemoRangePart(i));
+  const parts = memoRangeParts.map(p => ({ ...p }));
+  if (parts.some(p => !p.chapter || !p.from || !p.to)){ showAlertModal("장과 절을 선택해주세요."); return; }
+  const overlap = parts.some((p, i) => parts.some((q, k) => k > i && q.chapter === p.chapter && q.from <= p.to && p.from <= q.to));
+  if (overlap){ showAlertModal("같은 절이 두 번 들어 있어요.\n범위를 다시 골라 주세요."); return; }
   // 전체화면 요청은 버튼을 누른 그 순간(다른 await 전에)에 해야 브라우저가 허락한다
   if (!(await enterMemoTestScreen())) return;
   memoRangeFinished = false;
@@ -997,24 +1044,26 @@ async function startMemoRange(){
   const list = document.getElementById("memo-range-list");
   const btn = document.getElementById("btn-memo-range-start");
 
-  document.getElementById("memo-range-title").textContent = `${REVELATION.book} ${chapter}장 ${from}~${to}절`;
+  document.getElementById("memo-range-panel-title").textContent = `${REVELATION.book} ${memoRangeLabel(parts)}`;
   document.getElementById("memo-range-summary").hidden = true;
   document.getElementById("memo-range-legend").hidden = true;
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   panel.hidden = false;
   btn.disabled = true;
 
-  let texts;
-  try { texts = await getRevelationChapterText(chapter); }
+  try { await Promise.all([...new Set(parts.map(p => p.chapter))].map(getRevelationChapterText)); }
   catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; btn.disabled = false; return; }
   finally { btn.disabled = false; }
 
   const verses = [];
-  for (let v = from; v <= to; v++){
-    const found = texts.find(t => t.verse === v);
-    verses.push({ verse: v, text: found ? found.text : null });
+  for (const p of parts){
+    const texts = memoTextCache[p.chapter] || [];
+    for (let v = p.from; v <= p.to; v++){
+      const found = texts.find(t => t.verse === v);
+      verses.push({ chapter: p.chapter, verse: v, text: found ? found.text : null });
+    }
   }
-  memoRange = { chapter, verses };
+  memoRange = { chapter: parts[0].chapter, parts, verses };
   buildMemoRangeRows();
 }
 
@@ -1028,7 +1077,7 @@ function buildMemoRangeRows(focusFirst = true){
     const row = document.createElement("div");
     row.className = "verse-input-row";
     row.innerHTML = `
-      <span class="verse-input-row__num">${v.verse}절</span>
+      <span class="verse-input-row__num">${memoVerseLabel(memoRange.parts.length > 1, v.chapter, v.verse)}</span>
       <div class="verse-input-row__main">
         <div class="verse-input-row__box memo-range__box">
           <textarea class="verse-input-row__textarea memo-range__input" rows="1" data-idx="${i}"
@@ -1078,7 +1127,7 @@ function gradeMemoRange(){
     box.hidden = true;
     const markNum = pass => {
       row.querySelector(".verse-input-row__num").innerHTML =
-        `<span class="memo-range__numlabel">${v.verse}절<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span>`;
+        `<span class="memo-range__numlabel">${memoVerseLabel(memoRange.parts.length > 1, v.chapter, v.verse)}<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span>`;
     };
     // 정답 상자 — "정답" 글자는 위가 아니라 왼쪽 "N절" 칸 자리에 (style.css .memo-range__answer 참고)
     const answer = html => `<div class="memo-range__answer"><span class="memo-range__answer-label">정답</span><div class="memo-result__text">${html}</div></div>`;
@@ -1160,6 +1209,7 @@ async function enterMemoTestScreen(){
     showAlertModal("분할 화면이나 작은 창에서는\n암기 테스트를 볼 수 없어요.\n화면 전체로 연 뒤 다시 눌러 주세요.");
     return false;
   }
+  pushMemoBackGuard();
   return true;
 }
 
@@ -1189,13 +1239,81 @@ function abortMemoRangeTest(message){
   showAlertModal(message);
 }
 
-function onMemoFullscreenChange(){
+/* ---------- 실수로 화면을 옮기지 않게 먼저 묻기 (테스트 보호가 켜져 있고, 채점·제출 전 시험 중일 때) ----------
+   - 상단 메뉴·로그아웃·"‹ 전체 장"을 누르면 → "정말 이동할까요?" (이동하면 시험을 그만두고 내용은 지운다)
+   - 전체화면이 풀리면(폰 뒤로가기 제스처·Esc 등) → "계속하기"면 다시 전체화면으로, "그만두기"면 지운다
+   - 전체화면이 아닐 때 폰 뒤로가기 → 같은 질문 (시험을 시작할 때 방문 기록을 하나 더 쌓아 두고 뒤로가기를 가로챈다)
+   - 새로고침·탭 닫기 → 브라우저 기본 "사이트에서 나가시겠습니까?" 창
+   ※ 홈 버튼·다른 앱으로 전환·알림창 내리기처럼 브라우저 밖으로 나가는 동작은 웹페이지가 미리 알 수 없어서 묻지 못한다
+     (그때는 지금처럼 나가는 순간 지우고, 돌아오면 알린다) */
+const MEMO_LEAVE_MESSAGE = "시험 중이에요.\n이동하면 입력한 내용이 지워집니다.\n정말 이동할까요?";
+function memoTestGuarded(){ return memoStrictOn() && memoRangeTestInProgress(); }
+
+// 폰 뒤로가기 제스처는 "전체화면 해제"와 "뒤로가기"가 한꺼번에 올 수 있다 — 질문은 하나만 띄우고 같은 답을 함께 쓴다
+let memoLeaveAsking = null;
+function askMemoLeave(message, okLabel, cancelLabel){
+  if (!memoLeaveAsking) memoLeaveAsking = showConfirmModal(message, okLabel, cancelLabel).finally(() => { memoLeaveAsking = null; });
+  return memoLeaveAsking;
+}
+// "계속" — 그 사이 전체화면이 풀렸으면 다시 켠다 (단추를 누른 그 순간이라 켤 수 있다)
+let memoResuming = false;
+async function resumeMemoFullscreen(){
+  if (memoResuming || !memoStrictOn() || !memoFullscreenSupported || isMemoFullscreen() || !memoRangeTestInProgress()) return;
+  memoResuming = true;
+  const el = document.documentElement;
+  try {
+    await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen());
+    memoWeEnteredFullscreen = true;
+  } catch {
+    abortMemoRangeTest("전체화면으로 돌아가지 못해\n입력한 내용이 지워졌습니다.\n다시 하려면 테스트를 눌러 주세요.");
+  } finally { memoResuming = false; }
+}
+
+// 화면을 옮겨도 되면 true — 시험 중이면 물어보고, 옮기기로 하면 시험을 그만둔다
+async function confirmLeaveMemoTest(){
+  if (!memoTestGuarded()) return true;
+  const wasFull = isMemoFullscreen();
+  if (!(await askMemoLeave(MEMO_LEAVE_MESSAGE, "이동", "계속 시험"))){
+    if (wasFull) await resumeMemoFullscreen(); // 묻는 사이 전체화면이 풀렸을 때만 다시 켠다
+    return false;
+  }
+  if (memoRangeTestInProgress()) quitMemoRangeTest();
+  return true;
+}
+// 알림 없이 시험을 접는다 (본인이 그만두기로 했을 때)
+function quitMemoRangeTest(){
+  memoRange = null;
+  document.querySelectorAll("#memo-range-list .memo-range__input").forEach(t => t.blur());
+  document.getElementById("memo-range-list").innerHTML = "";
+  document.getElementById("memo-range-panel").hidden = true;
+  leaveMemoTestScreen(); // 우리가 켠 전체화면이면 끈다 (이때는 묻지 않음)
+}
+
+// 뒤로가기 가로채기 — 시험을 시작할 때 기록을 하나 쌓아 두면, 뒤로가기를 눌러도 이 페이지에 머문 채 popstate가 온다
+function pushMemoBackGuard(){
+  if (!memoStrictOn() || (history.state && history.state.memoTest)) return;
+  history.pushState({ memoTest: true }, "");
+}
+window.addEventListener("popstate", async () => {
+  if (!memoTestGuarded()) return;
+  if (await confirmLeaveMemoTest()) renderMemoHome();
+  else pushMemoBackGuard(); // 계속하면 다음 뒤로가기도 다시 가로챌 수 있게
+});
+window.addEventListener("beforeunload", e => {
+  if (!memoTestGuarded()) return;
+  e.preventDefault();
+  e.returnValue = ""; // 브라우저 기본 "나가시겠습니까?" 창
+});
+
+async function onMemoFullscreenChange(){
   if (isMemoFullscreen()) return;
   const wasOurs = memoWeEnteredFullscreen;
   memoWeEnteredFullscreen = false;
-  if (memoFullscreenSupported && wasOurs && memoRangeTestInProgress()){
-    abortMemoRangeTest("전체화면이 해제되어\n입력한 내용이 지워졌습니다.\n다시 하려면 테스트를 눌러 주세요.");
-  }
+  if (!memoFullscreenSupported || !wasOurs || !memoTestGuarded()) return;
+  const quit = await askMemoLeave("전체화면이 해제됐어요.\n시험을 그만두면 입력한 내용이 지워집니다.\n그만둘까요?", "그만두기", "계속하기");
+  if (!memoRangeTestInProgress()) return; // 같은 질문을 다른 쪽(뒤로가기)에서 이미 처리했으면
+  if (quit) quitMemoRangeTest();
+  else await resumeMemoFullscreen();
 }
 document.addEventListener("fullscreenchange", onMemoFullscreenChange);
 document.addEventListener("webkitfullscreenchange", onMemoFullscreenChange);
@@ -1249,7 +1367,7 @@ window.addEventListener("focus", noticeMemoWipedOnReturn);
 window.addEventListener("pagehide", wipeMemoAnswersOnLeave);
 
 document.getElementById("btn-memo-range").addEventListener("click", openMemoRange);
-document.getElementById("btn-memo-range-back").addEventListener("click", renderMemoHome);
+document.getElementById("btn-memo-range-back").addEventListener("click", async () => { if (await confirmLeaveMemoTest()) renderMemoHome(); });
 document.getElementById("btn-memo-range-start").addEventListener("click", startMemoRange);
 document.getElementById("btn-memo-range-grade").addEventListener("click", async e => {
   const kind = e.currentTarget.dataset.kind;
@@ -1271,13 +1389,15 @@ async function submitMemoRange(){
   if (!memoRange) return;
   const btn = document.getElementById("btn-memo-range-grade");
   const inputs = [...document.querySelectorAll("#memo-range-list .memo-range__input")];
+  const multi = memoRange.parts.length > 1;
   const answers = memoRange.verses
-    .map((v, i) => ({ verse: v.verse, text: v.text === null ? null : inputs[i].value }))
+    .map((v, i) => ({ ...(multi ? { chapter: v.chapter } : {}), verse: v.verse, text: v.text === null ? null : inputs[i].value }))
     .filter(a => a.text !== null);
-  const from = memoRange.verses[0].verse, to = memoRange.verses[memoRange.verses.length - 1].verse;
+  const first = memoRange.parts[0];
   btn.disabled = true;
   try {
-    await api("/memorize", { method: "POST", body: { action: "submitTest", chapter: memoRange.chapter, from, to, answers } });
+    await api("/memorize", { method: "POST", body: { action: "submitTest", chapter: first.chapter, from: first.from, to: first.to,
+      ...(multi ? { parts: memoRange.parts } : {}), answers } });
   } catch (err) {
     showAlertModal(err.message);
     btn.disabled = false;
@@ -1320,8 +1440,7 @@ async function openMemoReview(){
   if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : "아직 기록이 없어요."}</p>`; return; }
 
   // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
-  const chapters = [...new Set(memoReviewTests.map(t => t.chapter))];
-  await Promise.all(chapters.map(c => getRevelationChapterText(c).catch(() => [])));
+  await Promise.all(memoChaptersOf(memoReviewTests).map(c => getRevelationChapterText(c).catch(() => [])));
   const nameOf = n => { const u = (memoData.users || []).find(x => x.name === n); return u && u.nickname ? `${n} · ${u.nickname}` : n; };
 
   list.innerHTML = memoReviewTests.map((t, i) => {
@@ -1332,8 +1451,8 @@ async function openMemoReview(){
       <button type="button" class="memo-review-item${memoReviewMode === "mine" ? " memo-review-item--mine" : ""}" data-idx="${i}"${t.pending ? " disabled" : ""}>
         ${memoReviewMode === "all"
           ? `<span class="memo-review-item__name">${escapeHtml(nameOf(t.name))}${t.sent ? ` <small class="memo-review-item__sent">결과 보냄</small>` : ""}</span>
-             <span class="memo-review-item__range">${t.chapter}장 ${t.from}~${t.to}절</span>`
-          : `<span class="memo-review-item__name">${t.chapter}장 ${t.from}~${t.to}절<span class="memo-review-item__date">${whenText}</span>${!t.pending && !t.seen ? ` <small class="memo-review-item__new">새 결과</small>` : ""}</span>`}
+             <span class="memo-review-item__range">${memoRangeLabel(memoPartsOf(t))}</span>`
+          : `<span class="memo-review-item__name">${memoRangeLabel(memoPartsOf(t))}<span class="memo-review-item__date">${whenText}</span>${!t.pending && !t.seen ? ` <small class="memo-review-item__new">새 결과</small>` : ""}</span>`}
         <span class="memo-review-item__score">${t.pending ? `<small class="memo-review-item__wait">채점 대기</small>` : `⭕ ${ok} · ❌ ${wrong}`}</span>
         ${memoReviewMode === "all" ? `<span class="memo-review-item__when">${whenText}</span>` : ""}
       </button>`;
@@ -1341,14 +1460,24 @@ async function openMemoReview(){
   list.querySelectorAll("[data-idx]").forEach(b => b.addEventListener("click", () => openMemoReviewDetail(Number(b.dataset.idx))));
 }
 
+// 시험에 든 절을 차례로 — { chapter, verse, src(본문, 없으면 undefined), answer(쓴 답, 없으면 undefined) }
+// (예전 한 장짜리 기록의 답에는 장 번호가 없어서 그 시험의 장으로 본다)
+function memoTestVerses(t){
+  const out = [];
+  for (const p of memoPartsOf(t)){
+    const texts = memoTextCache[p.chapter] || [];
+    for (let v = p.from; v <= p.to; v++){
+      out.push({ chapter: p.chapter, verse: v, src: texts.find(x => x.verse === v),
+        answer: t.answers.find(a => a.verse === v && (a.chapter || t.chapter) === p.chapter) });
+    }
+  }
+  return out;
+}
 // 한 사람의 테스트를 채점 — 띄어쓰기만 다른 건 통과, 비워 둔 절은 오답, 본문 미등록 절은 빼고 센다
 function scoreMemoTest(t){
-  const texts = memoTextCache[t.chapter] || [];
   let ok = 0, wrong = 0;
-  for (let v = t.from; v <= t.to; v++){
-    const src = texts.find(x => x.verse === v);
+  for (const { src, answer: a } of memoTestVerses(t)){
     if (!src) continue;
-    const a = t.answers.find(x => x.verse === v);
     if (!a || !normalizeVerseText(a.text)){ wrong++; continue; }
     if (gradeMemoAnswer(a.text, src.text).status === "wrong") wrong++; else ok++;
   }
@@ -1356,13 +1485,12 @@ function scoreMemoTest(t){
 }
 
 // 제출된 테스트 하나를 채점된 모습으로: "N절" 위 빨간 동그라미/X, 쓴 답(틀린 곳 표시), 틀리면 정답
-function renderGradedMemoTest(t, texts){
+function renderGradedMemoTest(t){
   const answerBox = html => `<div class="memo-range__answer"><span class="memo-range__answer-label">정답</span><div class="memo-result__text">${html}</div></div>`;
+  const multi = memoPartsOf(t).length > 1;
   let ok = 0, wrong = 0, skipped = 0;
   const rows = [];
-  for (let v = t.from; v <= t.to; v++){
-    const src = texts.find(x => x.verse === v);
-    const a = t.answers.find(x => x.verse === v);
+  for (const { chapter, verse: v, src, answer: a } of memoTestVerses(t)){
     if (!src){ skipped++; continue; }
     let pass, status, body;
     if (!a || !normalizeVerseText(a.text)){
@@ -1377,7 +1505,7 @@ function renderGradedMemoTest(t, texts){
     if (pass) ok++; else wrong++;
     rows.push(`
       <div class="verse-input-row is-${status}">
-        <span class="verse-input-row__num"><span class="memo-range__numlabel">${v}절<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span></span>
+        <span class="verse-input-row__num"><span class="memo-range__numlabel">${memoVerseLabel(multi, chapter, v)}<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span></span>
         <div class="verse-input-row__main"><div class="memo-range__result">${body}</div></div>
       </div>`);
   }
@@ -1390,15 +1518,14 @@ function gradedMemoSummaryHTML(ok, wrong, skipped){
 let memoReviewOpenIdx = -1;
 function openMemoReviewDetail(idx){
   const t = memoReviewTests[idx];
-  const texts = memoTextCache[t.chapter] || [];
   document.getElementById("memo-review-list").hidden = true;
   document.getElementById("memo-review-detail").hidden = false;
   document.getElementById("btn-memo-review-refresh").hidden = true;
   document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? t.name : "시험 결과";
   document.getElementById("btn-memo-review-back").textContent = "‹ 목록";
-  document.getElementById("memo-review-detail-title").textContent = `${REVELATION.book} ${t.chapter}장 ${t.from}~${t.to}절`;
+  document.getElementById("memo-review-detail-title").textContent = `${REVELATION.book} ${memoRangeLabel(memoPartsOf(t))}`;
 
-  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t, texts);
+  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t);
   memoReviewOpenIdx = idx;
   const sendBtn = document.getElementById("btn-memo-send-result");
   sendBtn.parentElement.hidden = memoReviewMode !== "all";
@@ -1914,14 +2041,14 @@ async function openAdminMemoPerson(name){
   const mine = memoAdminTests.filter(t => t.name === name);
   if (!mine.length){ el.innerHTML = `<p class="form-note">기록이 없어요.</p>`; return; }
   el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
-  await Promise.all([...new Set(mine.map(t => t.chapter))].map(c => getRevelationChapterText(c).catch(() => [])));
+  await Promise.all(memoChaptersOf(mine).map(c => getRevelationChapterText(c).catch(() => [])));
   el.innerHTML = mine.map(t => {
     const { ok, wrong } = scoreMemoTest(t);
     const state = !t.sent ? "채점 대기" : t.seen ? "결과 확인함" : "결과 보냄";
     return `
       <div class="memo-admin-row" data-at="${escapeHtml(t.at)}">
         <button type="button" class="memo-review-item memo-review-item--mine">
-          <span class="memo-review-item__name">${t.chapter}장 ${t.from}~${t.to}절<span class="memo-review-item__date">${memoTimeText(t.at)}</span> <small class="memo-admin-state">${state}</small></span>
+          <span class="memo-review-item__name">${memoRangeLabel(memoPartsOf(t))}<span class="memo-review-item__date">${memoTimeText(t.at)}</span> <small class="memo-admin-state">${state}</small></span>
           <span class="memo-review-item__score">⭕ ${ok} · ❌ ${wrong}</span>
         </button>
         <button type="button" class="memo-admin-del" aria-label="이 기록 지우기">×</button>
@@ -1934,7 +2061,7 @@ document.getElementById("memo-admin-list").addEventListener("click", async e => 
   const t = memoAdminTests.find(x => x.name === memoAdminName && x.at === row.dataset.at);
   if (!t) return;
   if (!e.target.closest(".memo-admin-del")){ openAdminMemoDetail(t); return; }
-  if (!(await showConfirmModal(`${t.name}님의 ${t.chapter}장 ${t.from}~${t.to}절 기록을 지울까요?`, "지우기"))) return;
+  if (!(await showConfirmModal(`${t.name}님의 ${memoRangeLabel(memoPartsOf(t))} 기록을 지울까요?`, "지우기"))) return;
   try {
     await api("/memorize", { method: "POST", body: { action: "deleteTest", name: t.name, at: t.at } });
     memoAdminTests = memoAdminTests.filter(x => x !== t);
@@ -1943,8 +2070,8 @@ document.getElementById("memo-admin-list").addEventListener("click", async e => 
 });
 function openAdminMemoDetail(t){
   memoAdminShow("detail");
-  document.getElementById("memo-admin-detail-title").textContent = `${REVELATION.book} ${t.chapter}장 ${t.from}~${t.to}절`;
-  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t, memoTextCache[t.chapter] || []);
+  document.getElementById("memo-admin-detail-title").textContent = `${REVELATION.book} ${memoRangeLabel(memoPartsOf(t))}`;
+  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t);
   document.getElementById("memo-admin-rows").innerHTML = rowsHTML;
   document.getElementById("memo-admin-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped);
 }

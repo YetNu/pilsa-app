@@ -280,22 +280,21 @@
         <div class="memo-head">
           <button class="btn btn--ghost btn-back" id="btn-memo-range-back">‹ 전체 장</button>
           <h3 id="memo-range-title">암기 테스트</h3>
+          <!-- 제목 바로 오른쪽 옆 -->
+          <button type="button" class="btn btn--primary memo-range__start" id="btn-memo-range-start">테스트 시작</button>
         </div>
 
+        <!-- 범위: 보통은 한 장 안에서. 장이 이어지는 날은 ＋로 다음 장 범위를 붙인다 (예: 9장 20~21절 + 10장 1~3절) -->
         <div class="week-box memo-range__picker">
-          <span>계시록</span>
-          <select id="memo-range-chapter" aria-label="장"></select>
-          <span>장 :</span>
-          <select id="memo-range-from" aria-label="시작 절"></select>
-          <span>~</span>
-          <select id="memo-range-to" aria-label="끝 절"></select>
-          <span>절</span>
-          <button type="button" class="btn btn--primary" id="btn-memo-range-start">테스트</button>
+          <div class="memo-range__parts" id="memo-range-parts"></div>
+          <div class="memo-range__picker-actions">
+            <button type="button" class="memo-range__add" id="btn-memo-range-add" aria-label="다른 장 범위 추가" title="다른 장 범위 추가">＋</button>
+          </div>
         </div>
 
         <div class="pilsa-panel" id="memo-range-panel" hidden>
           <div class="memo-range__head">
-            <h3 id="memo-range-title"></h3>
+            <h3 id="memo-range-panel-title"></h3>
             <!-- 채점하면 제목 오른쪽에 표시 색 안내 -->
             <span class="memo-range__legend" id="memo-range-legend" hidden>
               <span class="memo-range__legend-red">빨강</span> = 오타, <span class="memo-range__legend-orange">주황</span> = 띄어쓰기
