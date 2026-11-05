@@ -43,6 +43,9 @@ html,body{ height:100%; }
 /* 내용이 길어져 스크롤바가 생겼다 없어졌다 할 때 화면이 좌우로 밀리지 않게 자리를 항상 잡아둔다
    (암기 화면의 가리기 ↔ 본문 보기 버튼이 제자리에 있어야 해서) */
 html{ scrollbar-gutter: stable; }
+/* 암기 테스트 화면에서는 폰의 "화면 끌어내려 새로고침"을 끈다 (실수로 새로고침돼 쓴 답이 날아가지 않게) */
+html:has(#view-memo:not([hidden]) #memo-range:not([hidden])),
+html:has(#view-memo:not([hidden]) #memo-range:not([hidden])) body{ overscroll-behavior-y: none; }
 body{
   margin:0;
   background:

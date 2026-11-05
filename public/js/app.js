@@ -1304,6 +1304,15 @@ window.addEventListener("beforeunload", e => {
   e.preventDefault();
   e.returnValue = ""; // 브라우저 기본 "나가시겠습니까?" 창
 });
+// 새로고침 단축키(F5, Ctrl+R, Ctrl+Shift+R, 맥은 Cmd+R)는 시험 중에 아예 막는다
+// (주소창 옆 새로고침 단추는 웹페이지가 막을 수 없어서 위의 "나가시겠습니까?" 창만 뜬다.
+//  폰의 화면을 끌어내려 새로고침하는 동작은 style.css에서 시험 화면일 때 꺼 둔다)
+document.addEventListener("keydown", e => {
+  const reload = e.key === "F5" || ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R"));
+  if (!reload || !memoTestGuarded()) return;
+  e.preventDefault();
+  showAlertModal("시험 중에는 새로고침할 수 없어요.");
+});
 
 async function onMemoFullscreenChange(){
   if (isMemoFullscreen()) return;
