@@ -31,7 +31,7 @@ const curSetObj = () => sets.find(x => x.id === curSet);
 function renderGachaState(){
   const total = sets.reduce((n, x) => n + x.tokens, 0);
   $("gacha-chip-count").textContent = total;
-  $("btn-gacha").hidden = total < 1 && $("gacha").hidden;
+  $("btn-gacha").hidden = total < 1;
   const s = curSetObj();
   tokens = s ? s.tokens : 0;
   $("gacha-left").textContent = tokens;
@@ -54,8 +54,8 @@ async function refreshGachaChip(){
   if (!getCurrentUser()){ sets = []; useSet(null); return; }
   try {
     sets = (await api("/gacha")).sets;
-    // 창이 열려 있으면 보던 뽑기를 그대로, 닫혀 있으면 기회가 남은 뽑기로
-    const keep = !$("gacha").hidden && (busy || (curSetObj() && sets.some(x => x.id === curSet && x.tokens > 0)));
+    // 뽑기 화면에 있으면 보던 뽑기를 그대로, 아니면 기회가 남은 뽑기로
+    const keep = viewOn && (busy || (curSetObj() && sets.some(x => x.id === curSet && x.tokens > 0)));
     useSet(keep ? curSet : null);
   } catch { /* 아이콘만 못 띄우는 것이라 조용히 넘어간다 */ }
 }
@@ -67,34 +67,34 @@ $("gacha-sets").addEventListener("click", e => {
 });
 window.refreshGachaChip = refreshGachaChip;
 
-/* ---------- 뽑기 창 열고 닫기 ---------- */
+/* ---------- 뽑기 화면 (상단 목록의 "뽑기" / 이름 옆 아이콘) ---------- */
+// 기계는 뽑기 화면 안에 놓인다. 화면에 들어오면 그리기를 시작하고, 나가면 멈춘다
 const overlay = $("gacha");
-let running = false; // 기계 그리기 반복 중인지 (창이 닫혀 있으면 멈춘다)
-async function openGacha(){
-  overlay.hidden = false;
-  document.body.style.overflow = "hidden";
+$("gacha-host").appendChild(overlay);
+overlay.hidden = false;
+overlay.removeAttribute("role"); overlay.removeAttribute("aria-modal"); // 이제 창이 아니라 화면의 일부
+let viewOn = false;
+let running = false; // 기계 그리기 반복 중인지
+async function setGachaViewActive(on){
+  if (on === viewOn) return;
+  viewOn = on;
+  if (!on){ if (!busy) running = false; return; }
+  showGachaTab("machine");
   resize();
   syncMachine();
   if (!running){ running = true; last = performance.now(); requestAnimationFrame(frame); }
   await refreshGachaChip();  // 그사이 관리자가 항목이나 기회를 바꿨을 수 있다
   syncMachine();
 }
-function closeGacha(){
-  if (busy) return;
-  $("gacha-mine").hidden = true;
-  overlay.hidden = true;
-  document.body.style.overflow = "";
-  running = false;
-  renderGachaState(); // 기회를 다 썼으면 아이콘을 숨긴다
-}
-$("btn-gacha").addEventListener("click", openGacha);
-window.openGacha = openGacha; // 왼쪽 위 목록의 "뽑기"
-$("gacha-close").addEventListener("click", closeGacha);
+window.setGachaViewActive = setGachaViewActive;
+// 이름 옆 아이콘 → 뽑기 화면으로 (시험 중이면 먼저 묻는다)
+$("btn-gacha").addEventListener("click", async () => {
+  if (typeof confirmLeaveMemoTest === "function" && !(await confirmLeaveMemoTest())) return;
+  showView("view-gacha");
+});
 document.addEventListener("keydown", e => {
-  if (e.key !== "Escape" || overlay.hidden) return;
-  if (!rv.hidden){ if (rv.classList.contains("done")) closeReveal(); return; }
-  if (!$("gacha-mine").hidden){ $("gacha-mine").hidden = true; return; } // 목록이 열려 있으면 목록만 닫는다
-  closeGacha();
+  if (e.key !== "Escape" || rv.hidden) return;
+  if (rv.classList.contains("done")) closeReveal();
 });
 
 // 기계 상태를 남은 기회/항목에 맞춘다
@@ -123,7 +123,7 @@ function resize(){
   const oc = S / ratio / 2;
   balls.forEach(b => { b.x = cx + (b.x - oc) * ratio; b.y = cy + (b.y - oc) * ratio; b.r *= ratio; });
 }
-new ResizeObserver(() => { if (!overlay.hidden && Math.abs(glass.clientWidth - S) > 1) resize(); }).observe(glass);
+new ResizeObserver(() => { if (viewOn && Math.abs(glass.clientWidth - S) > 1) resize(); }).observe(glass);
 
 // 항목마다 공 색을 하나씩 — 바로 앞의 몇 개와 색상이 겹치지 않게
 const colorMap = new Map();
@@ -556,26 +556,38 @@ async function loadAdminGacha(){
 }
 window.loadAdminGacha = loadAdminGacha;
 
-/* ---------- 기계 창 안 "내가 뽑은 것" ---------- */
+/* ---------- 뽑기 화면 탭: 뽑기 / 내가 뽑은 것 ---------- */
+function showGachaTab(tab){
+  document.querySelectorAll("[data-gacha-tab]").forEach(b => b.classList.toggle("is-active", b.dataset.gachaTab === tab));
+  $("gacha-host").hidden = tab !== "machine";
+  $("gacha-mine-pane").hidden = tab !== "mine";
+  if (tab === "machine"){ resize(); syncMachine(); }
+  if (tab === "mine") loadMyGacha();
+}
+document.querySelectorAll("[data-gacha-tab]").forEach(b => b.addEventListener("click", () => { if (!busy) showGachaTab(b.dataset.gachaTab); }));
+
+// 카드 한 장에 하나씩 — 종류 색 띠 + 크게 쓴 내용, 아래에 날짜·뽑기 이름. 관리자가 "사용"으로 표시한 건 흐리게
 const fmtAt = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-async function openMyGacha(){
-  if (busy) return;
-  const list = $("gacha-mine-log");
+async function loadMyGacha(){
+  const list = $("gacha-mine-log"), sum = $("gacha-mine-sum");
+  sum.innerHTML = "";
   list.innerHTML = `<li class="form-note">불러오는 중…</li>`;
-  $("gacha-mine").hidden = false;
-  $("gacha-mine-back").focus();
   try {
     const { log } = await api("/gacha?mine=1");
-    list.innerHTML = log.length ? log.map(l => `
-      <li${l.used ? ` class="is-used"` : ""}><time>${fmtAt(l.at)}</time><span class="gacha-log__item">${l.setName ? `<small class="gacha-log__set">${esc(l.setName)}</small> ` : ""}${typeTag(l.type)} ${esc(l.text)}</span>${l.used ? `<small class="gacha-mine__used">사용함</small>` : ""}</li>`).join("")
-      : `<li class="form-note">아직 뽑은 게 없어요.</li>`;
+    if (!log.length){ list.innerHTML = `<li class="gacha-cards__empty">아직 뽑은 게 없어요.</li>`; return; }
+    const n = t => log.filter(l => l.type === t).length;
+    sum.innerHTML = `<span class="gacha-mine__total">모두 <b>${log.length}</b>번</span>`
+      + TYPE_ORDER.filter(n).map(t => `<span class="gacha-mine__pill is-${t}">${TYPE_LABEL[t]} <b>${n(t)}</b></span>`).join("");
+    list.innerHTML = log.map(l => `
+      <li class="gacha-card is-${l.type}${l.used ? " is-used" : ""}">
+        <div class="gacha-card__top">${typeTag(l.type)}${l.used ? `<span class="gacha-card__used">사용함 ✓</span>` : ""}</div>
+        <p class="gacha-card__text">${esc(l.text)}</p>
+        <p class="gacha-card__meta">${fmtAt(l.at)}${l.setName ? ` · ${esc(l.setName)}` : ""}</p>
+      </li>`).join("");
   } catch (err){
-    list.innerHTML = `<li class="form-note">불러오지 못했어요. ${esc(err.message || "")}</li>`;
+    list.innerHTML = `<li class="gacha-cards__empty">불러오지 못했어요. ${esc(err.message || "")}</li>`;
   }
 }
-function closeMyGacha(){ $("gacha-mine").hidden = true; }
-$("gacha-mine-btn").addEventListener("click", openMyGacha);
-$("gacha-mine-back").addEventListener("click", () => { closeMyGacha(); $("gacha-mine-btn").focus(); });
 
 // 뽑기 종류 단추 + 고른 뽑기의 이름·항목·기회
 function selectAdminSet(id){
