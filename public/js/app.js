@@ -1146,7 +1146,7 @@ function gradeMemoRange(){
     row.classList.add(`is-${g.status}`);
     markNum(g.status !== "wrong");
     const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
-    resultEl.innerHTML = g.status === "ok" ? typed : typed + answer(g.sourceHTML);
+    resultEl.innerHTML = g.status !== "wrong" ? typed : typed + answer(g.sourceHTML);
     resultEl.hidden = false;
   });
   document.getElementById("memo-range-legend").hidden = false;
@@ -1509,7 +1509,7 @@ function renderGradedMemoTest(t){
       const g = gradeMemoAnswer(a.text, src.text);
       pass = g.status !== "wrong"; status = g.status;
       const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
-      body = g.status === "ok" ? typed : typed + answerBox(g.sourceHTML);
+      body = g.status !== "wrong" ? typed : typed + answerBox(g.sourceHTML);
     }
     if (pass) ok++; else wrong++;
     rows.push(`
@@ -1803,26 +1803,65 @@ function diffChars(a, b){
 }
 
 // 띄어쓰기로 나눈 단어 단위로 맞춰 본다 — 한 글자라도 다르면 그 단어 전체를 빨갛게.
-// 짝이 안 맞은 단어 묶음끼리 띄어쓰기만 다르면(붙여 보면 같으면) 빨강 대신 주황
+// 짝이 안 맞은 단어 묶음끼리 띄어쓰기만 다르면(붙여 보면 같으면) 내가 쓴 글 안에서 띄어쓰기 자리만 주황으로 짚는다
+// (붙여야 하는 곳은 공백 칸이 주황, 띄어야 하는 곳은 글자 사이에 주황 세로줄)
+function spacingMarksHTML(tg, sg){
+  const cuts = words => { const set = new Set(); let n = 0; words.slice(0, -1).forEach(w => set.add(n += Array.from(w).length)); return set; };
+  const tCut = cuts(tg), sCut = cuts(sg);
+  const chars = Array.from(tg.join(""));
+  let out = "";
+  chars.forEach((ch, k) => {
+    if (k){
+      if (tCut.has(k) && sCut.has(k)) out += " ";
+      else if (tCut.has(k)) out += '<span class="is-space"> </span>';
+      else if (sCut.has(k)) out += '<span class="is-space-need" aria-label="띄어쓰기"></span>';
+    }
+    out += escapeHtml(ch);
+  });
+  return out;
+}
 function diffWords(typed, source){
   const tw = typed.split(/\s+/).filter(Boolean), sw = source.split(/\s+/).filter(Boolean);
   const { aKeep, bKeep } = diffChars(tw, sw); // 배열도 그대로 받아 단어끼리 비교
-  const tCls = new Array(tw.length).fill(""), sCls = new Array(sw.length).fill("");
+  const tOut = [], sOut = [];
+  const red = w => '<span class="is-wrong">' + escapeHtml(w) + "</span>";
   let i = 0, j = 0;
   while (i < tw.length || j < sw.length){
     const ti = i, sj = j;
     while (i < tw.length && !aKeep[i]) i++;
     while (j < sw.length && !bKeep[j]) j++;
     const tg = tw.slice(ti, i), sg = sw.slice(sj, j);
-    if (tg.length || sg.length){
-      const cls = tg.length && sg.length && tg.join("") === sg.join("") ? "is-space" : "is-wrong";
-      for (let k = ti; k < i; k++) tCls[k] = cls;
-      for (let k = sj; k < j; k++) sCls[k] = cls;
+    if (tg.length && sg.length && tg.join("") === sg.join("")){
+      tOut.push(spacingMarksHTML(tg, sg));
+      sOut.push(...sg.map(escapeHtml));
+    } else if (tg.length && sg.length){
+      // 틀린 단어와 띄어쓰기만 다른 곳이 붙어 있으면 — 앞이나 뒤에서 띄어쓰기만 다른 묶음을 떼어 내 주황으로
+      const ends = (a, b) => { // 붙여 보면 같은 가장 짧은 앞/뒤 묶음 [앞, 단어 수(내 글), 단어 수(원문)]
+        for (let n = 2; n <= a.length + b.length; n++)
+          for (let x = 1; x < n; x++){
+            const y = n - x; if (x > a.length || y > b.length) continue;
+            if (a.slice(0, x).join("") === b.slice(0, y).join("")) return [true, x, y];
+            if (a.slice(-x).join("") === b.slice(-y).join("")) return [false, x, y];
+          }
+        return null;
+      };
+      let a = tg, b = sg; const tHead = [], sHead = [], tTail = [], sTail = [];
+      for (let e; a.length && b.length && (e = ends(a, b)); ){
+        const [front, x, y] = e;
+        if (front){ tHead.push(spacingMarksHTML(a.slice(0, x), b.slice(0, y))); sHead.push(...b.slice(0, y).map(escapeHtml)); a = a.slice(x); b = b.slice(y); }
+        else { tTail.unshift(spacingMarksHTML(a.slice(-x), b.slice(-y))); sTail.unshift(...b.slice(-y).map(escapeHtml)); a = a.slice(0, -x); b = b.slice(0, -y); }
+      }
+      tOut.push(...tHead, ...a.map(red), ...tTail);
+      sOut.push(...sHead, ...b.map(red), ...sTail);
+    } else {
+      tOut.push(...tg.map(red));
+      sOut.push(...sg.map(red));
     }
+    if (i < tw.length) tOut.push(escapeHtml(tw[i]));
+    if (j < sw.length) sOut.push(escapeHtml(sw[j]));
     i++; j++; // 서로 짝이 맞은 단어 하나씩 건너뛴다
   }
-  const html = (words, cls) => words.map((w, k) => cls[k] ? `<span class="${cls[k]}">${escapeHtml(w)}</span>` : escapeHtml(w)).join(" ");
-  return { typedHTML: html(tw, tCls), sourceHTML: html(sw, sCls) };
+  return { typedHTML: tOut.join(" "), sourceHTML: sOut.join(" ") };
 }
 
 // 외워서 쓴 글(typed)을 원문(sourceText)과 비교한다. 띄어쓰기만 다르면 통과("space"), 글자가 다르면 오답.
@@ -1856,8 +1895,8 @@ function gradeMemoTest(){
          <div class="memo-result__text">${escapeHtml(g.typed)}</div>`
     : g.status === "space"
       ? `<p class="memo-result__verdict is-correct">⭕ 통과! 내용은 다 맞아요.${doneHint}</p>
-         <p class="memo-result__note">다만 띄어쓰기가 원문과 달라요 — 주황색으로 표시된 곳을 원문대로 띄어 쓰거나 붙여 써 보세요.</p>
-         ${compare("주황색 = 원문에는 없는 띄어쓰기", "주황색 = 띄어 써야 하는 곳")}`
+         <p class="memo-result__note">다만 띄어쓰기가 원문과 달라요 — 주황 세로줄은 띄어 쓰고, 주황 칸은 붙여 써 보세요.</p>
+         <div class="memo-result__text">${g.typedHTML}</div>`
       : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요. 빨간 단어를 확인해보세요.</p>
          ${compare("빨간 단어 = 틀리게 쓴 단어 · 주황색 = 띄어쓰기", "빨간 단어 = 빠뜨리거나 다르게 쓴 단어 · 주황색 = 띄어쓰기")}`;
   setMemoMode("result");
