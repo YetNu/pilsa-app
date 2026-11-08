@@ -1802,14 +1802,27 @@ function diffChars(a, b){
   return { aKeep, bKeep };
 }
 
-// 짝이 안 맞은 글자 표시: 글자는 빨강(is-wrong), 띄어쓰기(공백)는 주황(is-space)
-// — 공백은 빨갛게 칠해도 눈에 잘 안 띄어서, 어디를 띄어야(붙여야) 하는지 따로 보이게 하기 위함
-function markDiffChars(text, keep){
-  return Array.from(text)
-    .map((ch, i) => keep[i] ? escapeHtml(ch)
-      : /\s/.test(ch) ? `<span class="is-space">${escapeHtml(ch)}</span>`
-      : `<span class="is-wrong">${escapeHtml(ch)}</span>`)
-    .join("");
+// 띄어쓰기로 나눈 단어 단위로 맞춰 본다 — 한 글자라도 다르면 그 단어 전체를 빨갛게.
+// 짝이 안 맞은 단어 묶음끼리 띄어쓰기만 다르면(붙여 보면 같으면) 빨강 대신 주황
+function diffWords(typed, source){
+  const tw = typed.split(/\s+/).filter(Boolean), sw = source.split(/\s+/).filter(Boolean);
+  const { aKeep, bKeep } = diffChars(tw, sw); // 배열도 그대로 받아 단어끼리 비교
+  const tCls = new Array(tw.length).fill(""), sCls = new Array(sw.length).fill("");
+  let i = 0, j = 0;
+  while (i < tw.length || j < sw.length){
+    const ti = i, sj = j;
+    while (i < tw.length && !aKeep[i]) i++;
+    while (j < sw.length && !bKeep[j]) j++;
+    const tg = tw.slice(ti, i), sg = sw.slice(sj, j);
+    if (tg.length || sg.length){
+      const cls = tg.length && sg.length && tg.join("") === sg.join("") ? "is-space" : "is-wrong";
+      for (let k = ti; k < i; k++) tCls[k] = cls;
+      for (let k = sj; k < j; k++) sCls[k] = cls;
+    }
+    i++; j++; // 서로 짝이 맞은 단어 하나씩 건너뛴다
+  }
+  const html = (words, cls) => words.map((w, k) => cls[k] ? `<span class="${cls[k]}">${escapeHtml(w)}</span>` : escapeHtml(w)).join(" ");
+  return { typedHTML: html(tw, tCls), sourceHTML: html(sw, sCls) };
 }
 
 // 외워서 쓴 글(typed)을 원문(sourceText)과 비교한다. 띄어쓰기만 다르면 통과("space"), 글자가 다르면 오답.
@@ -1820,8 +1833,8 @@ function gradeMemoAnswer(typedText, sourceText){
   // 띄어쓰기만 다른 경우(공백을 모두 빼면 같음)는 통과("space")로 본다 — 대신 다른 곳은 주황색으로 짚어준다
   const noSpace = s => s.replace(/\s+/g, "");
   const status = typed === source ? "ok" : noSpace(typed) === noSpace(source) ? "space" : "wrong";
-  const { aKeep, bKeep } = diffChars(typed, source);
-  return { status, typed, typedHTML: markDiffChars(typed, aKeep), sourceHTML: markDiffChars(source, bKeep) };
+  const { typedHTML, sourceHTML } = diffWords(typed, source);
+  return { status, typed, typedHTML, sourceHTML };
 }
 
 function gradeMemoTest(){
@@ -1845,8 +1858,8 @@ function gradeMemoTest(){
       ? `<p class="memo-result__verdict is-correct">⭕ 통과! 내용은 다 맞아요.${doneHint}</p>
          <p class="memo-result__note">다만 띄어쓰기가 원문과 달라요 — 주황색으로 표시된 곳을 원문대로 띄어 쓰거나 붙여 써 보세요.</p>
          ${compare("주황색 = 원문에는 없는 띄어쓰기", "주황색 = 띄어 써야 하는 곳")}`
-      : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요. 빨간 글자를 확인해보세요.</p>
-         ${compare("빨간 글자 = 틀리게 쓴 곳 · 주황색 = 띄어쓰기", "빨간 글자 = 빠뜨리거나 다르게 쓴 곳 · 주황색 = 띄어쓰기")}`;
+      : `<p class="memo-result__verdict is-wrong">❌ 틀린 곳이 있어요. 빨간 단어를 확인해보세요.</p>
+         ${compare("빨간 단어 = 틀리게 쓴 단어 · 주황색 = 띄어쓰기", "빨간 단어 = 빠뜨리거나 다르게 쓴 단어 · 주황색 = 띄어쓰기")}`;
   setMemoMode("result");
 }
 
