@@ -5,6 +5,7 @@ const { requireUser, requireAdmin } = require("./_auth");
 // 뽑기 — 뽑기 종류(세트)를 여러 개 만들 수 있고, 세트마다 이름·항목·회원별 기회가 따로 있다.
 // 관리자가 회원에게 어떤 뽑기의 기회를 주면, 그 회원은 기회 하나에 한 번씩 그 뽑기를 뽑을 수 있다
 // GET                         → 본인: { sets: [{ id, name, items: [{ type, text }], tokens: 남은 기회 }] }
+// GET ?mine=1                 → 본인: { log: [{ at, text, type, setName, used }] } (내가 뽑은 기록)
 // GET ?admin=1                → 관리자: { sets: [{ id, name, items }], tokens: { 뽑기번호: { 이름: 남은 기회 } }, users, log }
 // POST { action: "draw", set }                          → 본인: 그 뽑기의 기회 하나를 써서 뽑기 — 무엇이 나올지는 서버가 정한다
 //                                                         { index, item, items, tokens }
@@ -31,6 +32,11 @@ exports.handler = async (event) => {
         return json(200, { sets: sets.map(x => ({ ...x, items: itemsOf(x.id) })), tokens, users: approved, log });
       }
       const me = requireUser(event);
+      if (q.mine){ // 내가 뽑은 기록 전부 (최근 것부터)
+        const log = (await store.getGachaLog(Infinity)).filter(l => l.name === me.name)
+          .map(({ at, text, type, setName, used }) => ({ at, text, type, setName, used: !!used }));
+        return json(200, { log });
+      }
       return json(200, { sets: sets.map(x => ({ ...x, items: itemsOf(x.id), tokens: (tokens[x.id] || {})[me.name] || 0 })) });
     }
 

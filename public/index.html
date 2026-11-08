@@ -14,9 +14,17 @@
   <!-- ============ 상단 바 (로그인 후에만 표시) ============ -->
   <header class="topbar" id="topbar" hidden>
     <div class="topbar__left">
-      <button class="topbar__btn" id="btn-status" title="현황">현황</button>
-      <button class="topbar__btn" id="btn-mypilsa" title="필사">필사</button>
-      <button class="topbar__btn" id="btn-memo" title="계시록 암기">계시록 암기</button>
+      <!-- 왼쪽 위 목록 단추 — 누르면 화면 목록이 펼쳐진다 -->
+      <button type="button" class="topbar__menu-btn" id="btn-menu" aria-label="목록 열기" aria-expanded="false" aria-controls="topbar-menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <span class="topbar__here" id="topbar-here"></span>
+      <nav class="topbar__menu" id="topbar-menu" hidden>
+        <button class="topbar__btn" id="btn-status">현황</button>
+        <button class="topbar__btn" id="btn-mypilsa">필사</button>
+        <button class="topbar__btn" id="btn-memo">계시록 암기</button>
+        <button class="topbar__btn" id="btn-gacha-view">뽑기</button>
+      </nav>
     </div>
     <div class="topbar__title">
       <span id="topbar-name"><!-- 로그인한 사람의 이름 (JS로 채움) --></span>
@@ -37,7 +45,7 @@
     <section class="view" id="view-auth">
       <div class="auth-card">
         <div class="auth-card__mark">✎</div>
-        <h1 class="auth-card__title">필사</h1>
+        <h1 class="auth-card__title">사랑</h1>
         <p class="auth-card__sub">한 절 한 절, 손끝으로 옮겨 적습니다</p>
 
         <form id="form-login" class="auth-form">
@@ -308,6 +316,16 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- ============ 뽑기 (내가 뽑은 것) ============ -->
+    <section class="view" id="view-gacha" hidden>
+      <h2 class="view-title">뽑기</h2>
+      <div class="gacha-mine__go" id="gacha-mine-go" hidden>
+        <button type="button" class="btn btn--primary" id="btn-gacha-mine-open">뽑으러 가기 <small id="gacha-mine-left"></small></button>
+      </div>
+      <h4 class="gacha-mine__title">내가 뽑은 것</h4>
+      <ul class="gacha-log gacha-log--mine" id="gacha-mine-log"><li class="form-note">불러오는 중…</li></ul>
     </section>
 
     <!-- ============ 관리자 ============ -->

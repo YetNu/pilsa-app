@@ -85,6 +85,7 @@ function closeGacha(){
   document.body.style.overflow = "";
   running = false;
   renderGachaState(); // 기회를 다 썼으면 아이콘을 숨긴다
+  if (!$("view-gacha").hidden) loadMyGacha(); // 뽑기 화면에서 뽑았으면 목록을 새로
 }
 $("btn-gacha").addEventListener("click", openGacha);
 $("gacha-close").addEventListener("click", closeGacha);
@@ -542,6 +543,29 @@ async function loadAdminGacha(){
   renderAdminLog(d.log);
 }
 window.loadAdminGacha = loadAdminGacha;
+
+/* ---------- 뽑기 화면: 내가 뽑은 것 ---------- */
+const fmtAt = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+async function loadMyGacha(){
+  const list = $("gacha-mine-log");
+  const renderGo = () => {
+    const left = sets.reduce((n, x) => n + x.tokens, 0);
+    $("gacha-mine-go").hidden = left < 1;
+    $("gacha-mine-left").textContent = `(남은 기회 ${left}번)`;
+  };
+  renderGo();
+  try {
+    const [{ log }] = await Promise.all([api("/gacha?mine=1"), refreshGachaChip()]);
+    renderGo();
+    list.innerHTML = log.length ? log.map(l => `
+      <li${l.used ? ` class="is-used"` : ""}><time>${fmtAt(l.at)}</time><span class="gacha-log__item">${l.setName ? `<small class="gacha-log__set">${esc(l.setName)}</small> ` : ""}${typeTag(l.type)} ${esc(l.text)}</span>${l.used ? `<small class="gacha-mine__used">사용함</small>` : ""}</li>`).join("")
+      : `<li class="form-note">아직 뽑은 게 없어요.</li>`;
+  } catch (err){
+    list.innerHTML = `<li class="form-note">불러오지 못했어요. ${esc(err.message || "")}</li>`;
+  }
+}
+window.loadMyGacha = loadMyGacha;
+$("btn-gacha-mine-open").addEventListener("click", openGacha);
 
 // 뽑기 종류 단추 + 고른 뽑기의 이름·항목·기회
 function selectAdminSet(id){

@@ -251,3 +251,10 @@
 .gacha-log__del:hover{ background: var(--rule-soft); color: var(--ink); }
 .gacha-log time{ color: var(--ink-soft); white-space:nowrap; }
 .gacha-log b{ white-space:nowrap; }
+
+/* 뽑기 화면 (내가 뽑은 것) */
+.gacha-mine__go{ margin: 4px 0 18px; }
+.gacha-mine__go small{ font-weight:500; opacity:.85; }
+.gacha-mine__title{ margin: 0 0 8px; }
+.gacha-log--mine li{ padding:9px 2px; }
+.gacha-mine__used{ flex:none; font-size:.72rem; font-weight:700; color: var(--green-ink); white-space:nowrap; }

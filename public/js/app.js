@@ -48,7 +48,7 @@ let statusWeekOffset = 0;    // 전체 현황의 요일별 달성률 박스: 0 =
 let openAssignment = null;   // 현재 펼쳐진 (날짜, 배정쌍)
 
 /* ---------- 화면 전환 ---------- */
-const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-admin"];
+const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-gacha", "view-admin"];
 function showView(id){
   views.forEach(v => document.getElementById(v).hidden = (v !== id));
   document.getElementById("topbar").hidden = (id === "view-auth");
@@ -56,12 +56,16 @@ function showView(id){
   document.getElementById("btn-admin").hidden = !(me && me.role === "admin");
   document.getElementById("topbar-name").textContent = me ? me.name : "";
   // 상단 메뉴에서 지금 보고 있는 화면 표시
-  const menuFor = { "view-status": "btn-status", "view-mypilsa": "btn-mypilsa", "view-memo": "btn-memo", "view-admin": "btn-admin" };
+  const menuFor = { "view-status": "btn-status", "view-mypilsa": "btn-mypilsa", "view-memo": "btn-memo", "view-gacha": "btn-gacha-view", "view-admin": "btn-admin" };
   document.querySelectorAll(".topbar__btn").forEach(b => b.classList.toggle("is-active", b.id === menuFor[id]));
+  // 목록 단추 옆에 지금 보는 화면 이름
+  document.getElementById("topbar-here").textContent = { "view-status": "현황", "view-mypilsa": "필사", "view-memo": "계시록 암기", "view-gacha": "뽑기", "view-admin": "관리자" }[id] || "";
+  closeTopMenu();
   if (id === "view-status") renderStatusTab();
   if (id === "view-mypilsa"){ weekOffset = weekOffset || 0; renderWeek(); }
   if (id === "view-memo") renderMemo();
   if (id === "view-admin") renderAdmin();
+  if (id === "view-gacha" && typeof loadMyGacha === "function") loadMyGacha();
   // gacha.js — 화면을 옮길 때마다 남은 뽑기 기회를 다시 확인 (첫 화면은 gacha.js가 읽힌 뒤 직접 확인)
   if (typeof refreshGachaChip === "function") refreshGachaChip();
 }
@@ -178,6 +182,20 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
 document.getElementById("btn-status").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; statusWeekOffset = 0; memoStatusWeekOffset = 0; showView("view-status"); });
 document.getElementById("btn-mypilsa").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; weekOffset = 0; showView("view-mypilsa"); });
 document.getElementById("btn-memo").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; memoWeekOffset = 0; showView("view-memo"); });
+document.getElementById("btn-gacha-view").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; showView("view-gacha"); });
+
+/* ---------- 왼쪽 위 목록 단추 ---------- */
+const topMenu = document.getElementById("topbar-menu"), topMenuBtn = document.getElementById("btn-menu");
+function closeTopMenu(){ topMenu.hidden = true; topMenuBtn.setAttribute("aria-expanded", "false"); }
+topMenuBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  const open = topMenu.hidden;
+  topMenu.hidden = !open;
+  topMenuBtn.setAttribute("aria-expanded", String(open));
+});
+// 목록 밖을 누르거나 Esc면 닫는다 (목록 안 단추를 누르면 그 화면으로 옮기며 닫힘)
+document.addEventListener("click", e => { if (!topMenu.hidden && !e.target.closest("#topbar-menu")) closeTopMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !topMenu.hidden) closeTopMenu(); });
 document.getElementById("btn-admin").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; showView("view-admin"); });
 document.getElementById("btn-logout").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; logout(); });
 
