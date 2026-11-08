@@ -507,11 +507,11 @@
     <div class="gacha__inner">
       <div class="gacha__head">
         <h2 class="gacha__title" id="gacha-title">랜덤 <span>뽑기</span><small class="gacha__set" id="gacha-set-name"></small></h2>
+        <!-- 기회가 있는 뽑기가 둘 이상이면 골라서 뽑는다 (소리 단추와 같은 줄) -->
+        <div class="gacha__sets" id="gacha-sets" hidden></div>
         <button type="button" class="gacha__mute" id="gacha-mute" aria-pressed="false">🔊 소리 켜짐</button>
         <button type="button" class="gacha__close" id="gacha-close" aria-label="닫기">✕</button>
       </div>
-      <!-- 기회가 있는 뽑기가 둘 이상이면 골라서 뽑는다 -->
-      <div class="gacha__sets" id="gacha-sets" hidden></div>
       <div class="gc-machine">
         <div class="gc-lid"></div>
         <div class="gc-dome">

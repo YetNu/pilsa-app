@@ -304,3 +304,7 @@
   font-family:'Jua', var(--serif), sans-serif; font-weight:400; font-size:1.6rem; color: var(--ink); line-height:1.2;
 }
 .gacha-group__title small{ font-family: inherit; font-size:.55em; color: var(--ink-soft); }
+/* 뽑기 고르는 단추와 소리 단추를 한 줄에, 같은 높이로 */
+#view-gacha .gacha__head{ align-items:center; }
+#view-gacha .gacha__sets{ flex:1; width:auto; min-width:0; }
+#view-gacha .gacha__set-btn, #view-gacha .gacha__mute{ height:34px; padding:0 12px; display:inline-flex; align-items:center; line-height:1; }
