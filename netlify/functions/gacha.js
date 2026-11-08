@@ -100,7 +100,7 @@ exports.handler = async (event) => {
       if (!(await findSet())) return json(404, { error: "없어진 뽑기예요. 새로고침 후 다시 해주세요." });
       if (!Array.isArray(items) || items.length > MAX_ITEMS) return json(400, { error: `항목은 ${MAX_ITEMS}개까지 넣을 수 있어요.` });
       const clean = items
-        .map(it => ({ type: it && ["pen", "love"].includes(it.type) ? it.type : "win", text: String((it && it.text) || "").trim().slice(0, MAX_TEXT) }))
+        .map(it => ({ type: it && ["pen", "love", "lose"].includes(it.type) ? it.type : "win", text: String((it && it.text) || "").trim().slice(0, MAX_TEXT) }))
         .filter(it => it.text);
       await store.setGachaItems(setId, clean);
       return json(200, { ok: true, items: clean });

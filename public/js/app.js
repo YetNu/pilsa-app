@@ -48,7 +48,7 @@ let statusWeekOffset = 0;    // 전체 현황의 요일별 달성률 박스: 0 =
 let openAssignment = null;   // 현재 펼쳐진 (날짜, 배정쌍)
 
 /* ---------- 화면 전환 ---------- */
-const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-gacha", "view-admin"];
+const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-admin"];
 function showView(id){
   views.forEach(v => document.getElementById(v).hidden = (v !== id));
   document.getElementById("topbar").hidden = (id === "view-auth");
@@ -56,16 +56,15 @@ function showView(id){
   document.getElementById("btn-admin").hidden = !(me && me.role === "admin");
   document.getElementById("topbar-name").textContent = me ? me.name : "";
   // 상단 메뉴에서 지금 보고 있는 화면 표시
-  const menuFor = { "view-status": "btn-status", "view-mypilsa": "btn-mypilsa", "view-memo": "btn-memo", "view-gacha": "btn-gacha-view", "view-admin": "btn-admin" };
+  const menuFor = { "view-status": "btn-status", "view-mypilsa": "btn-mypilsa", "view-memo": "btn-memo", "view-admin": "btn-admin" };
   document.querySelectorAll(".topbar__btn").forEach(b => b.classList.toggle("is-active", b.id === menuFor[id]));
   // 목록 단추 옆에 지금 보는 화면 이름
-  document.getElementById("topbar-here").textContent = { "view-status": "현황", "view-mypilsa": "필사", "view-memo": "계시록 암기", "view-gacha": "뽑기", "view-admin": "관리자" }[id] || "";
+  document.getElementById("topbar-here").textContent = { "view-status": "현황", "view-mypilsa": "필사", "view-memo": "계시록 암기", "view-admin": "관리자" }[id] || "";
   closeTopMenu();
   if (id === "view-status") renderStatusTab();
   if (id === "view-mypilsa"){ weekOffset = weekOffset || 0; renderWeek(); }
   if (id === "view-memo") renderMemo();
   if (id === "view-admin") renderAdmin();
-  if (id === "view-gacha" && typeof loadMyGacha === "function") loadMyGacha();
   // gacha.js — 화면을 옮길 때마다 남은 뽑기 기회를 다시 확인 (첫 화면은 gacha.js가 읽힌 뒤 직접 확인)
   if (typeof refreshGachaChip === "function") refreshGachaChip();
 }
@@ -182,7 +181,8 @@ document.getElementById("form-signup").addEventListener("submit", async e => {
 document.getElementById("btn-status").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; statusWeekOffset = 0; memoStatusWeekOffset = 0; showView("view-status"); });
 document.getElementById("btn-mypilsa").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; weekOffset = 0; showView("view-mypilsa"); });
 document.getElementById("btn-memo").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; memoWeekOffset = 0; showView("view-memo"); });
-document.getElementById("btn-gacha-view").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; showView("view-gacha"); });
+// 뽑기는 화면을 옮기지 않고 뽑기 기계 창을 연다 (gacha.js)
+document.getElementById("btn-gacha-view").addEventListener("click", async () => { closeTopMenu(); if (!(await confirmLeaveMemoTest())) return; if (typeof openGacha === "function") openGacha(); });
 
 /* ---------- 왼쪽 위 목록 단추 ---------- */
 const topMenu = document.getElementById("topbar-menu"), topMenuBtn = document.getElementById("btn-menu");

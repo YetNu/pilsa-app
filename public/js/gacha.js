@@ -12,8 +12,8 @@ const CONFETTI_COLORS = ["#ff6fae","#3fa9f5","#ffc53d","#a77bf3","#45cc85","#ff9
 const wait = ms => new Promise(r => setTimeout(r, ms));
 // 속성 값에도 넣으므로 따옴표까지 바꾼다
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const TYPE_LABEL = { win: "당첨", pen: "벌칙", love: "사랑" };
-const TYPE_ORDER = ["win", "pen", "love"]; // 항목 목록은 당첨 → 벌칙 → 사랑 묶음 순서
+const TYPE_LABEL = { win: "당첨", pen: "벌칙", love: "사랑", lose: "꽝" };
+const TYPE_ORDER = ["win", "pen", "love", "lose"]; // 항목 목록은 당첨 → 벌칙 → 사랑 → 꽝 묶음 순서
 const typeTag = type => `<span class="gacha-tag is-${type}">${TYPE_LABEL[type] || TYPE_LABEL.win}</span>`;
 const store = {
   get(k){ try { return localStorage.getItem(k); } catch { return null; } },
@@ -81,17 +81,19 @@ async function openGacha(){
 }
 function closeGacha(){
   if (busy) return;
+  $("gacha-mine").hidden = true;
   overlay.hidden = true;
   document.body.style.overflow = "";
   running = false;
   renderGachaState(); // 기회를 다 썼으면 아이콘을 숨긴다
-  if (!$("view-gacha").hidden) loadMyGacha(); // 뽑기 화면에서 뽑았으면 목록을 새로
 }
 $("btn-gacha").addEventListener("click", openGacha);
+window.openGacha = openGacha; // 왼쪽 위 목록의 "뽑기"
 $("gacha-close").addEventListener("click", closeGacha);
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape" || overlay.hidden) return;
   if (!rv.hidden){ if (rv.classList.contains("done")) closeReveal(); return; }
+  if (!$("gacha-mine").hidden){ $("gacha-mine").hidden = true; return; } // 목록이 열려 있으면 목록만 닫는다
   closeGacha();
 });
 
@@ -333,6 +335,14 @@ function sadTrombone(){
     g.gain.setValueAtTime(0, t0 + dl); g.gain.linearRampToValueAtTime(0.09, t0 + dl + 0.03); g.gain.setValueAtTime(0.09, t0 + dl + dur - 0.08); g.gain.linearRampToValueAtTime(0, t0 + dl + dur);
     o.connect(flt).connect(g).connect(a.destination); o.start(t0 + dl); o.stop(t0 + dl + dur + 0.02); });
 }
+function womp(){   // 꽝: "띠용~" 하고 힘 빠지는 소리
+  const a = audio(); if (!a) return; const t0 = a.currentTime;
+  const o = a.createOscillator(), g = a.createGain(); o.type = "triangle";
+  o.frequency.setValueAtTime(520, t0); o.frequency.exponentialRampToValueAtTime(140, t0 + 0.7);
+  const l = a.createOscillator(), lg = a.createGain(); l.frequency.value = 9; lg.gain.value = 18; l.connect(lg).connect(o.frequency); l.start(t0); l.stop(t0 + 0.75);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.16, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.75);
+  o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + 0.78);
+}
 function chime(){   // 사랑: 맑게 올라가는 반짝임
   const a = audio(); if (!a) return; const t0 = a.currentTime;
   [659.25, 783.99, 987.77, 1318.5, 1567.98].forEach((f, i) => {
@@ -421,9 +431,9 @@ const rv = $("gacha-reveal"), cap = $("gacha-bigcap"), paper = $("gacha-paper"),
 let current = null;
 async function openReveal(ball){
   current = ball;
-  const pen = ball.type === "pen", love = ball.type === "love";
+  const pen = ball.type === "pen", love = ball.type === "love", lose = ball.type === "lose";
   cap.style.setProperty("--c", ball.color); cap.className = "gc-bigcap";
-  paper.className = "gc-paper" + (pen ? " pen" : love ? " love" : ""); ptext.className = "gc-ptext"; stamp.className = "gc-stamp";
+  paper.className = "gc-paper" + (pen ? " pen" : love ? " love" : lose ? " lose" : ""); ptext.className = "gc-ptext"; stamp.className = "gc-stamp";
   stamp.textContent = TYPE_LABEL[ball.type] || TYPE_LABEL.win;
   ptext.textContent = ball.text;
   $("gacha-again").hidden = tokens < 1;
@@ -437,7 +447,8 @@ async function openReveal(ball){
   await wait(720);
   if (pen) rv.classList.add("pen");
   if (love) rv.classList.add("love");
-  rv.classList.add("rays-on");
+  if (lose) rv.classList.add("lose");
+  if (!lose) rv.classList.add("rays-on"); // 꽝은 빛줄기도 꽃가루도 없이 조용히
   ptext.classList.add("pop");
   if (pen){
     stamp.classList.add("slam");
@@ -445,6 +456,7 @@ async function openReveal(ball){
     setTimeout(() => paper.classList.add("shake"), 250);
     setTimeout(sadTrombone, 1150);
   } else if (love){ stamp.classList.add("hit"); chime(); heartBurst(); }
+  else if (lose){ stamp.classList.add("hit"); womp(); setTimeout(() => paper.classList.add("droop"), 200); }
   else { stamp.classList.add("hit"); fanfare(); confetti(); }
   await wait(250); rv.classList.add("done");
   ($("gacha-again").hidden ? $("gacha-reveal-close") : $("gacha-again")).focus();
@@ -456,12 +468,12 @@ function fitResultText(text){
   const len = [...text].length;
   const byLength = len <= 4 ? 3.2 : len <= 8 ? 4.5 : len <= 14 ? 6 : len <= 24 ? 7.5 : 9; // 글이 길수록 작게
   const cap = len <= 4 ? 112 : len <= 8 ? 88 : len <= 14 ? 68 : len <= 24 ? 52 : 40;    // 넓은 화면에서도 이보다 크지 않게
-  let fsz = Math.round(Math.min(cap, w / byLength));
+  let fsz = w > 0 ? Math.max(18, Math.round(Math.min(cap, w / byLength))) : 40;
   ptext.style.fontSize = fsz + "px";
   while (fsz > 18 && (ptext.scrollWidth > ptext.clientWidth + 1 || ptext.scrollHeight > maxH)){ fsz -= 2; ptext.style.fontSize = fsz + "px"; }
 }
 function closeReveal(){
-  rv.classList.remove("show", "done", "rays-on", "thunder", "pen", "love");
+  rv.classList.remove("show", "done", "rays-on", "thunder", "pen", "love", "lose");
   setTimeout(() => { rv.hidden = true; stopConfetti(); }, 250);
   if (current && !current.detached){ // 뽑힌 공은 위에서 다시 기계 안으로 들어간다
     Object.assign(current, { fall: false, sink: false, gone: false, out: false, chosen: false,
@@ -544,19 +556,16 @@ async function loadAdminGacha(){
 }
 window.loadAdminGacha = loadAdminGacha;
 
-/* ---------- 뽑기 화면: 내가 뽑은 것 ---------- */
+/* ---------- 기계 창 안 "내가 뽑은 것" ---------- */
 const fmtAt = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-async function loadMyGacha(){
+async function openMyGacha(){
+  if (busy) return;
   const list = $("gacha-mine-log");
-  const renderGo = () => {
-    const left = sets.reduce((n, x) => n + x.tokens, 0);
-    $("gacha-mine-go").hidden = left < 1;
-    $("gacha-mine-left").textContent = `(남은 기회 ${left}번)`;
-  };
-  renderGo();
+  list.innerHTML = `<li class="form-note">불러오는 중…</li>`;
+  $("gacha-mine").hidden = false;
+  $("gacha-mine-back").focus();
   try {
-    const [{ log }] = await Promise.all([api("/gacha?mine=1"), refreshGachaChip()]);
-    renderGo();
+    const { log } = await api("/gacha?mine=1");
     list.innerHTML = log.length ? log.map(l => `
       <li${l.used ? ` class="is-used"` : ""}><time>${fmtAt(l.at)}</time><span class="gacha-log__item">${l.setName ? `<small class="gacha-log__set">${esc(l.setName)}</small> ` : ""}${typeTag(l.type)} ${esc(l.text)}</span>${l.used ? `<small class="gacha-mine__used">사용함</small>` : ""}</li>`).join("")
       : `<li class="form-note">아직 뽑은 게 없어요.</li>`;
@@ -564,8 +573,9 @@ async function loadMyGacha(){
     list.innerHTML = `<li class="form-note">불러오지 못했어요. ${esc(err.message || "")}</li>`;
   }
 }
-window.loadMyGacha = loadMyGacha;
-$("btn-gacha-mine-open").addEventListener("click", openGacha);
+function closeMyGacha(){ $("gacha-mine").hidden = true; }
+$("gacha-mine-btn").addEventListener("click", openMyGacha);
+$("gacha-mine-back").addEventListener("click", () => { closeMyGacha(); $("gacha-mine-btn").focus(); });
 
 // 뽑기 종류 단추 + 고른 뽑기의 이름·항목·기회
 function selectAdminSet(id){
@@ -675,7 +685,7 @@ $("gacha-add-form").addEventListener("submit", e => {
   if (!add.length){ input.focus(); return; }
   const type = document.querySelector("input[name=gacha-kind]:checked").value;
   input.value = "";
-  // 같은 종류끼리 이어서 — 늘 당첨 → 벌칙 → 사랑 묶음 순서
+  // 같은 종류끼리 이어서 — 늘 당첨 → 벌칙 → 사랑 → 꽝 묶음 순서
   const added = add.map(text => ({ type, text }));
   saveAdminItems(TYPE_ORDER.flatMap(t => [...adminItems.filter(it => it.type === t), ...(t === type ? added : [])]));
   input.focus();

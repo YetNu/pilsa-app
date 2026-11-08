@@ -12,7 +12,7 @@
 //   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
 //   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
 //   GachaSets:   번호 | 이름                    (뽑기 종류 — 비어 있으면 1번 "기본" 하나가 있는 것으로 본다)
-//   GachaItems:  종류(당첨/벌칙/사랑) | 항목 | 뽑기번호  (뽑기 기계에 넣을 항목 — 뽑기번호가 비어 있으면 1번)
+//   GachaItems:  종류(당첨/벌칙/사랑/꽝) | 항목 | 뽑기번호  (뽑기 기계에 넣을 항목 — 뽑기번호가 비어 있으면 1번)
 //   GachaTokens: 이름 | 남은 횟수 | 뽑기번호     (관리자가 준 뽑기 기회 — 뽑기번호가 비어 있으면 1번)
 //   GachaLog:    이름 | 시각 | 항목 | 종류 | 뽑기 이름 | 사용  (누가 언제 무엇을 뽑았는지 — 관리자가 사용 처리하면 "사용"에 시각)
 //   ※ Gacha 탭들도 없으면 처음 쓸 때 자동 생성
@@ -440,8 +440,8 @@ async function withSheet(sheets, title, fn){
   }
 }
 
-const GACHA_TYPE_LABEL = { win: "당첨", pen: "벌칙", love: "사랑" };
-const gachaTypeOf = label => label === "벌칙" ? "pen" : label === "사랑" ? "love" : "win";
+const GACHA_TYPE_LABEL = { win: "당첨", pen: "벌칙", love: "사랑", lose: "꽝" };
+const gachaTypeOf = label => label === "벌칙" ? "pen" : label === "사랑" ? "love" : label === "꽝" ? "lose" : "win";
 const DEFAULT_GACHA_SET = "1"; // 뽑기 종류를 나누기 전에 만든 항목·기회는 모두 1번
 
 // 표 전체를 머리글부터 다시 쓴다 (줄을 지우거나 끼워 넣을 때)
