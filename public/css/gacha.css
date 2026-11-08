@@ -296,3 +296,11 @@
 .gacha-card.is-used .gacha-card__text{ color: var(--ink-soft); text-decoration: line-through; }
 .gacha-cards__empty{ grid-column:1 / -1; padding:30px 0; text-align:center; color: var(--ink-soft); }
 @media (max-width:480px){ .gacha-cards{ grid-template-columns:1fr 1fr; gap:8px; } .gacha-card__text{ font-size:1.1rem; } }
+/* 내가 뽑은 것 — 뽑기 이름 제목 */
+.gacha-cards__group{ grid-column:1 / -1; margin-top:14px; }
+.gacha-cards__group:first-child{ margin-top:0; }
+.gacha-group__title{
+  margin:0; display:flex; align-items:baseline; gap:8px; padding-bottom:6px; border-bottom:2px solid var(--ink);
+  font-family:'Jua', var(--serif), sans-serif; font-weight:400; font-size:1.6rem; color: var(--ink); line-height:1.2;
+}
+.gacha-group__title small{ font-family: inherit; font-size:.55em; color: var(--ink-soft); }

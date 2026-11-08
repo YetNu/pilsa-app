@@ -578,12 +578,17 @@ async function loadMyGacha(){
     const n = t => log.filter(l => l.type === t).length;
     sum.innerHTML = `<span class="gacha-mine__total">모두 <b>${log.length}</b>번</span>`
       + TYPE_ORDER.filter(n).map(t => `<span class="gacha-mine__pill is-${t}">${TYPE_LABEL[t]} <b>${n(t)}</b></span>`).join("");
-    list.innerHTML = log.map(l => `
+    // 뽑기 이름별로 묶어서 — 이름을 크게 제목으로, 그 아래 카드 (최근에 뽑은 뽑기가 위로)
+    const groups = new Map();
+    log.forEach(l => { const k = l.setName || "뽑기"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); });
+    list.innerHTML = [...groups].map(([name, ls]) => `
+      <li class="gacha-cards__group"><h3 class="gacha-group__title">${esc(name)}<small>${ls.length}번</small></h3></li>`
+      + ls.map(l => `
       <li class="gacha-card is-${l.type}${l.used ? " is-used" : ""}">
         <div class="gacha-card__top">${typeTag(l.type)}${l.used ? `<span class="gacha-card__used">사용함 ✓</span>` : ""}</div>
         <p class="gacha-card__text">${esc(l.text)}</p>
-        <p class="gacha-card__meta">${fmtAt(l.at)}${l.setName ? ` · ${esc(l.setName)}` : ""}</p>
-      </li>`).join("");
+        <p class="gacha-card__meta">${fmtAt(l.at)}</p>
+      </li>`).join("")).join("");
   } catch (err){
     list.innerHTML = `<li class="gacha-cards__empty">불러오지 못했어요. ${esc(err.message || "")}</li>`;
   }
