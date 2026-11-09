@@ -597,8 +597,8 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 }
 .memo-pick__cell:hover{ border-color: var(--ink-soft); }
 .memo-pick__cell.is-used{ color: var(--ink-soft); } /* 다른 줄에서 이미 고른 장 */
-.memo-pick__cell.is-prev{ background: rgba(var(--accent-rgb),.25); }
-.memo-pick__cell.is-start, .memo-pick__cell.is-in{ background: var(--ink); color: var(--card); }
+.memo-pick__cell.is-prev{ border:1px dashed rgba(var(--accent-rgb),.9); } /* 전에 고른 범위는 테두리만 */
+.memo-pick__cell.is-start, .memo-pick__cell.is-in{ background: rgba(var(--accent-rgb),.25); color: var(--ink); } /* 고른 절은 살구색 */
 .memo-range__num{
   width:2.6em; border:none; border-bottom:1px solid var(--rule); border-radius:0; background:transparent;
   padding:5px 2px; font-size:16px; text-align:center; color: var(--ink); outline:none;
