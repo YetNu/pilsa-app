@@ -5,7 +5,8 @@
 //   Users:       이름 | 비밀번호해시 | 별명 | 상태 | 역할
 //   Submissions: 이름 | dayIndex | 제출시각
 //   Config:      key | value   (start_date, open_until, memo_start_date, memo_start_chapter, memo_strict,
-//                                memo_review_on, memo_reviewer)
+//                                memo_review_on, memo_reviewer, pilsa_overrides, memo_overrides)
+//                pilsa_overrides / memo_overrides: 날짜별 배정 개수를 바꾼 것 {"YYYY-MM-DD": 개수} (JSON, 관리자 배정 달력)
 //   MemoTests:   이름 | 제출시각 | 장 | 시작절 | 끝절 | 답안(JSON) | 보냄 | 확인 | 범위(JSON)  (범위 암기 테스트 기록 — 없으면 처음 쓸 때 자동 생성.
 //                여러 장에 걸친 시험이면 "범위"에 [{장, 시작절, 끝절}…]이 들어가고, 장·시작절·끝절은 첫 범위, 답안마다 장 번호가 붙는다.
 //                채점자에게 제출하면 보냄·확인이 비어 있다가, 채점자가 결과를 보내면 "보냄", 본인이 결과를 처음 열어 보면 "확인"에 시각)
@@ -166,7 +167,10 @@ async function getConfig(){
   const memoStrictRow = find("memo_strict");
   const memoReviewOnRow = find("memo_review_on");
   const memoReviewerRow = find("memo_reviewer");
+  const parseObj = row => { try { const o = JSON.parse((row && row[1]) || "{}"); return o && typeof o === "object" ? o : {}; } catch { return {}; } };
   return {
+    pilsa_overrides: parseObj(find("pilsa_overrides")),
+    memo_overrides: parseObj(find("memo_overrides")),
     start_date: startDateRow ? startDateRow[1] : "",
     // 관리자가 정한, 미리 입력을 허용하는 마지막 날짜. 비어있으면 클라이언트가 기본값(이번 주 토요일까지)을 적용한다
     open_until: openUntilRow ? openUntilRow[1] : "",
@@ -194,6 +198,8 @@ async function setConfig(patch){
   if (patch.memo_strict !== undefined) upserts.push(["memo_strict", patch.memo_strict ? "1" : "0"]);
   if (patch.memo_review_on !== undefined) upserts.push(["memo_review_on", patch.memo_review_on ? "1" : "0"]);
   if (patch.memo_reviewer !== undefined) upserts.push(["memo_reviewer", patch.memo_reviewer || ""]);
+  if (patch.pilsa_overrides !== undefined) upserts.push(["pilsa_overrides", JSON.stringify(patch.pilsa_overrides || {})]);
+  if (patch.memo_overrides !== undefined) upserts.push(["memo_overrides", JSON.stringify(patch.memo_overrides || {})]);
 
   for (const [key, value] of upserts){
     const idx = rows.findIndex(r => r[0] === key);
@@ -210,6 +216,15 @@ async function setConfig(patch){
       rows[idx] = [key, value];
     }
   }
+}
+
+// 배정 달력에서 날짜 하나의 개수를 바꾼다 — kind: "pilsa" | "memo", count: 0~5 또는 null(기본대로)
+async function setScheduleOverride(kind, date, count){
+  const key = kind === "memo" ? "memo_overrides" : "pilsa_overrides";
+  const all = { ...(await getConfig())[key] };
+  if (count === null) delete all[date]; else all[date] = count;
+  await setConfig({ [key]: all });
+  return all;
 }
 
 /* ---------- Chapters (관리자가 입력하는 필사 원문) ---------- */
@@ -592,7 +607,7 @@ async function deleteGachaLog(name, at){
 module.exports = {
   getUsers, addUser, updateUser, removeUser, reorderUsers,
   getSubmissions, addSubmission,
-  getConfig, setConfig,
+  getConfig, setConfig, setScheduleOverride,
   getChapterVerses, setChapterVerses, getChapterCounts,
   getMemoChecks, setMemoCheck,
   getMemoTests, addMemoTest, markMemoTestSent, markMemoTestsSeen, deleteMemoTest,

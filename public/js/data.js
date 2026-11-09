@@ -54,35 +54,69 @@ function daysBetween(fromStr, toStr){
   return Math.round((utc(toStr) - utc(fromStr)) / 86400000);
 }
 
-/* 그 날짜에 배정된 장의 dayIndex. 시작일 이전이거나 (평일 전용 기간의) 주말이면 null */
+/* ---------- 날마다 몇 개씩 배정할지 바꾸기 (관리자 "필사 배정"·"암기 배정" 달력) ----------
+   기본 규칙(위의 평일/매일 규칙)으로 그 날 1개 또는 0개가 배정되는데, 관리자가 날짜별로
+   "배정 안 함(0)"이나 "2개, 3개…"로 바꿀 수 있다. 바꾼 값은 { "YYYY-MM-DD": 개수 } 로 Config에 저장되고,
+   그 날을 빼면 다음 배정일부터 이어지고, 늘리면 그만큼 다음 날 배정이 당겨진다.
+   (이미 낸 필사는 "몇 번째 장(dayIndex)"으로 저장돼 있어서, 날짜가 옮겨져도 기록은 그대로 그 장에 붙어 있다) */
+let PILSA_OVERRIDES = {};
+let MEMO_OVERRIDES = {};
+function setPilsaOverrides(o){ PILSA_OVERRIDES = o && typeof o === "object" ? o : {}; }
+function setMemoOverrides(o){ MEMO_OVERRIDES = o && typeof o === "object" ? o : {}; }
+
+// 시작일부터 하루씩 걸으며 total개를 다 배정할 때까지의 일정표 { byDate: { 날짜: [첫 번호, 개수] }, dateOf: [번호 → 날짜] }
+const scheduleCache = new Map();
+function buildSchedule(kind, total, startDate, baseCount, overrides){
+  const key = kind + "|" + startDate + "|" + JSON.stringify(overrides);
+  if (scheduleCache.has(key)) return scheduleCache.get(key);
+  const byDate = {}, dateOf = [];
+  let idx = 0, date = startDate, guard = 0;
+  while (idx < total && guard++ < 5000){
+    const o = overrides[date];
+    let c = Number.isInteger(o) && o >= 0 ? o : baseCount(date);
+    c = Math.min(c, total - idx);
+    if (c > 0){ byDate[date] = [idx, c]; for (let k = 0; k < c; k++) dateOf.push(date); }
+    idx += c;
+    date = addDays(date, 1);
+  }
+  const sched = { byDate, dateOf, last: dateOf[dateOf.length - 1] || startDate };
+  if (scheduleCache.size > 20) scheduleCache.clear();
+  scheduleCache.set(key, sched);
+  return sched;
+}
+// 필사의 기본 규칙: 시작일이 전환일 전이면 전환일 전까지는 매일, 그 뒤로는 평일만 하루 1장
+function pilsaBaseCount(startDate){
+  const dailyPeriod = startDate < PILSA_WEEKDAY_ONLY_FROM;
+  return date => (dailyPeriod && date < PILSA_WEEKDAY_ONLY_FROM) ? 1 : (isWeekend(date) ? 0 : 1);
+}
+function pilsaSchedule(startDate){
+  return buildSchedule("pilsa", CHAPTER_SEQUENCE.length, startDate, pilsaBaseCount(startDate), PILSA_OVERRIDES);
+}
+
+/* 그 날짜에 배정된 장들의 dayIndex 목록 (없으면 빈 목록) */
+function dateToDayIndices(dateStr, startDate){
+  if (!startDate || dateStr < startDate) return [];
+  const e = pilsaSchedule(startDate).byDate[dateStr];
+  return e ? Array.from({ length: e[1] }, (_, k) => e[0] + k) : [];
+}
+/* 그 날짜의 첫 번째 장 dayIndex. 배정이 없는 날이면 null */
 function dateToDayIndex(dateStr, startDate){
-  if (!startDate || dateStr < startDate) return null;
-  const dailyPeriod = startDate < PILSA_WEEKDAY_ONLY_FROM; // 매일 하던 기간이 있었는지
-  if (dailyPeriod && dateStr < PILSA_WEEKDAY_ONLY_FROM) return daysBetween(startDate, dateStr);
-  if (isWeekend(dateStr)) return null;
-  const pivot = dailyPeriod ? PILSA_WEEKDAY_ONLY_FROM : startDate;
-  const base = dailyPeriod ? daysBetween(startDate, pivot) : 0;
-  return base + weekdaySerial(dateStr) - weekdaySerial(pivot);
+  const list = dateToDayIndices(dateStr, startDate);
+  return list.length ? list[0] : null;
 }
 
 /* dateToDayIndex의 반대 — dayIndex번째 장을 하는 날짜 */
 function dayIndexToDate(dayIndex, startDate){
-  const dailyPeriod = startDate < PILSA_WEEKDAY_ONLY_FROM;
-  const base = dailyPeriod ? daysBetween(startDate, PILSA_WEEKDAY_ONLY_FROM) : 0;
-  if (dayIndex < base) return addDays(startDate, dayIndex);
-  let date = dailyPeriod ? PILSA_WEEKDAY_ONLY_FROM : startDate;
-  while (isWeekend(date)) date = addDays(date, 1);
-  const offset = daysBetween("1970-01-05", date) % 7; // 월=0 … 금=4
-  const total = offset + (dayIndex - base);
-  return addDays(date, Math.floor(total / 5) * 7 + (total % 5) - offset);
+  return pilsaSchedule(startDate).dateOf[dayIndex] || null;
 }
 
-/* dateStr 이전(그 날짜는 제외)에 배정된 날이 모두 몇 개인지 = 그 날짜 이후 첫 배정일의 dayIndex */
+/* dateStr 이전(그 날짜는 제외)에 배정된 장이 모두 몇 개인지 */
 function countAssignedBefore(dateStr, startDate){
   if (!startDate || dateStr <= startDate) return 0;
-  let date = dateStr;
-  while (dateToDayIndex(date, startDate) === null) date = addDays(date, 1);
-  return dateToDayIndex(date, startDate);
+  const { dateOf } = pilsaSchedule(startDate);
+  let n = 0;
+  while (n < dateOf.length && dateOf[n] < dateStr) n++;
+  return n;
 }
 
 /* "로마서1장" 형태로 표기 */
@@ -139,24 +173,25 @@ function isWeekend(dateStr){
    (암기 시작일 자체가 전환일 이후면 처음부터 매일 센다) */
 const MEMO_DAILY_FROM = "2026-10-25";
 
-/* 암기 시작일부터 순서대로 배정했을 때, 그 날짜에 외울 절.
-   시작일 이전·(평일 기간의) 주말·전체를 다 마친 뒤에는 null. 평일 기간에 시작일이 주말이면 다음 월요일부터. */
+/* 암기의 기본 규칙: 전환일 전까지는 평일만, 전환일부터는 매일 한 절 (시작일이 전환일 이후면 처음부터 매일) */
+function memoBaseCount(startDate){
+  return date => (startDate >= MEMO_DAILY_FROM || date >= MEMO_DAILY_FROM) ? 1 : (isWeekend(date) ? 0 : 1);
+}
+function memoSchedule(startDate){
+  return buildSchedule("memo", REVELATION_SEQUENCE.length, startDate, memoBaseCount(startDate), MEMO_OVERRIDES);
+}
+/* 암기 시작일부터 순서대로 배정했을 때, 그 날짜에 외울 절 목록 (없는 날은 빈 목록).
+   1장이 아닌 장부터 시작하면(기본 9장) 22장까지 간 뒤 1장으로 돌아와 시작 장 직전까지 — 그래야 전장을 다 돈다 */
+function getMemoVersesForDate(dateStr, startDate, startChapter){
+  if (!startDate || dateStr < startDate) return [];
+  const e = memoSchedule(startDate).byDate[dateStr];
+  if (!e) return [];
+  const offset = Math.max(REVELATION_SEQUENCE.findIndex(v => v.chapter === (startChapter || MEMO_DEFAULT_START_CHAPTER)), 0);
+  return Array.from({ length: e[1] }, (_, k) => REVELATION_SEQUENCE[(offset + e[0] + k) % REVELATION_SEQUENCE.length]);
+}
+/* 그 날짜의 첫 절 (예전 코드와의 호환용). 없으면 null */
 function getMemoVerseForDate(dateStr, startDate, startChapter){
-  if (!startDate || dateStr < startDate) return null;
-  let index;
-  if (startDate >= MEMO_DAILY_FROM){
-    index = daysBetween(startDate, dateStr);                       // 처음부터 매일
-  } else if (dateStr < MEMO_DAILY_FROM){
-    if (isWeekend(dateStr)) return null;                           // 평일 기간
-    index = weekdaySerial(dateStr) - weekdaySerial(startDate);
-  } else {
-    // 전환일까지 평일로 외운 절 수(= 전환일에 외울 절의 순번)부터 매일 하나씩
-    index = (weekdaySerial(MEMO_DAILY_FROM) - weekdaySerial(startDate)) + daysBetween(MEMO_DAILY_FROM, dateStr);
-  }
-  if (index >= REVELATION_SEQUENCE.length) return null;
-  // 1장이 아닌 장부터 시작하면(기본 9장) 22장까지 간 뒤 1장으로 돌아와 시작 장 직전까지 — 그래야 전장을 다 돈다
-  const offset = REVELATION_SEQUENCE.findIndex(v => v.chapter === (startChapter || MEMO_DEFAULT_START_CHAPTER));
-  return REVELATION_SEQUENCE[(Math.max(offset, 0) + index) % REVELATION_SEQUENCE.length];
+  return getMemoVersesForDate(dateStr, startDate, startChapter)[0] || null;
 }
 
 /* 보이지 않는 문자(BOM, zero-width space 등)와 줄바꿈 없는 공백(NBSP), 중복 공백을
@@ -204,7 +239,8 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     EPISTLES, CHAPTER_SEQUENCE, buildChapterSequence,
     getAssignmentForDayIndex, formatAssignmentLabel,
-    PILSA_WEEKDAY_ONLY_FROM, dateToDayIndex, dayIndexToDate, countAssignedBefore,
+    PILSA_WEEKDAY_ONLY_FROM, dateToDayIndex, dateToDayIndices, dayIndexToDate, countAssignedBefore,
+    setPilsaOverrides, setMemoOverrides, getMemoVersesForDate,
     REVELATION, REVELATION_TOTAL_VERSES, CONTENT_BOOKS, isValidRevelationVerse,
     REVELATION_SEQUENCE, MEMO_DEFAULT_START_CHAPTER, MEMO_DAILY_FROM, getMemoVerseForDate,
     toISODate, addDays, normalizeVerseText,

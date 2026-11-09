@@ -32,6 +32,7 @@ exports.handler = async (event) => {
       startDate: config.start_date || "",
       totalChapters: CHAPTER_SEQUENCE.length,
       openUntil: config.open_until || "",
+      pilsaOverrides: config.pilsa_overrides || {},
     });
   } catch (err) {
     console.error(err);

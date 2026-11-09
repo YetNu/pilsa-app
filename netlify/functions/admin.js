@@ -17,7 +17,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, name, nickname, startDate, names, openUntil, active } = JSON.parse(event.body || "{}");
+    const { action, name, nickname, startDate, names, openUntil, active, date, count } = JSON.parse(event.body || "{}");
 
     if (action === "approve"){
       const ok = await store.updateUser(name, { status: "approved", nickname: nickname || "" });
@@ -57,6 +57,15 @@ exports.handler = async (event) => {
       if (!startDate) return json(400, { error: "시작일을 선택해주세요." });
       await store.setConfig({ start_date: startDate });
       return json(200, { ok: true, startDate });
+    }
+
+    // 필사 배정 달력: 그 날 배정할 장 수 (0 = 배정 안 함, null = 기본대로)
+    if (action === "setPilsaOverride"){
+      const okDate = /^\d{4}-\d{2}-\d{2}$/.test(String(date || ""));
+      const okCount = count === null || (Number.isInteger(count) && count >= 0 && count <= 5);
+      if (!okDate || !okCount) return json(400, { error: "잘못된 요청이에요." });
+      const overrides = await store.setScheduleOverride("pilsa", date, count);
+      return json(200, { ok: true, overrides });
     }
 
     if (action === "setOpenUntil"){

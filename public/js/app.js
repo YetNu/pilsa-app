@@ -34,6 +34,8 @@ async function api(path, { method = "GET", body } = {}){
     throw new Error(data.error || "세션이 만료됐어요. 다시 로그인해주세요.");
   }
   if (!res.ok) throw new Error(data.error || "요청 처리 중 오류가 발생했어요.");
+  if (data.pilsaOverrides) setPilsaOverrides(data.pilsaOverrides);
+  if (data.memoOverrides) setMemoOverrides(data.memoOverrides);
   return data;
 }
 
@@ -245,12 +247,12 @@ function renderStatusList(){
     const pct = calcProgressPct(u.name, today, submissions, startDate, totalChapters);
     const sub = submissions[u.name] || {};
     const cells = days.map(d => {
-      const dayIndex = dateToDayIndex(d, startDate);
-      const done = dayIndex !== null && sub[dayIndex];
+      const indices = dateToDayIndices(d, startDate);
+      const done = indices.length && indices.every(i => sub[i]); // 하루에 두 장이면 둘 다 해야 ⭕
       // 한 주가 통째로 열려 있어서 미리 한 날은 ⭕로 보이고, ❌는 그 날짜가 실제로 된 뒤에만 붙인다
       let cls = "", mark = "-";
       if (done){ mark = "⭕"; cls = "is-done"; }
-      else if (dayIndex !== null && d <= today){ mark = "❌"; cls = "is-fail"; }
+      else if (indices.length && d <= today){ mark = "❌"; cls = "is-fail"; }
       return `<td class="${cls}">${mark}</td>`;
     }).join("");
 
@@ -287,17 +289,16 @@ function renderStatusWeekBox(){
 
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
-    const dayIndex = dateToDayIndex(d, startDate);
+    const indices = dateToDayIndices(d, startDate);
     const isFuture = d > today; // 아직 안 온 날은 (미리 한 사람이 있어도) 달성률을 매기지 않는다
-    const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
-    const hasAssignment = pair.length > 0;
-    chapRow.push(`<td>${formatAssignmentLabelHTML(pair)}</td>`);
+    const hasAssignment = indices.length > 0;
+    chapRow.push(`<td>${pilsaDayLabelHTML(indices)}</td>`);
 
     if (!hasAssignment || isFuture || totalUsers === 0){
       rateRow.push(`<td>-</td>`);
       return;
     }
-    const doneCount = users.filter(u => submissions[u.name] && submissions[u.name][dayIndex]).length;
+    const doneCount = users.filter(u => submissions[u.name] && indices.every(i => submissions[u.name][i])).length;
     const pct = Math.round((doneCount / totalUsers) * 100);
     applicableRates.push(pct);
     rateRow.push(`<td>${pct}%</td>`);
@@ -339,6 +340,14 @@ function calcProgressPct(userName, today, submissions, startDate, totalChapters)
 function formatAssignmentLabelHTML(pair){
   if (pair.length === 0) return "-";
   return `${pair[0].book}<br>${pair[0].chapter}장`;
+}
+// 그 날의 장들 (하루 여러 장이면 같은 책끼리 "로마서 1·2장"처럼 묶는다)
+function pilsaDayLabelHTML(indices){
+  if (!indices.length) return "-";
+  const items = indices.map(i => getAssignmentForDayIndex(i)[0]).filter(Boolean);
+  const groups = [];
+  items.forEach(a => { const g = groups[groups.length - 1]; if (g && g.book === a.book) g.chs.push(a.chapter); else groups.push({ book: a.book, chs: [a.chapter] }); });
+  return groups.map(g => `${g.book}<br>${g.chs.join("·")}장`).join("<br>");
 }
 
 // 미리 필사할 수 있는 마지막 날짜 — 기본은 이번 주 토요일(이번 주 분량은 전부 열림).
@@ -384,22 +393,31 @@ async function renderWeek(){
 
   days.forEach((d, i) => {
     dayRow.push(`<td>${dayLabels[i]}</td>`);
-    const dayIndex = dateToDayIndex(d, startDate);
+    const indices = dateToDayIndices(d, startDate);
     const isFuture = d > previewEnd;
-    const pair = dayIndex !== null ? getAssignmentForDayIndex(dayIndex) : [];
-    const label = pair.length ? formatAssignmentLabelHTML(pair) : "-";
 
-    if (!pair.length){
+    if (!indices.length){
       chapRow.push(`<td>-</td>`);
       doneRow.push(`<td>-</td>`);
     } else if (isFuture){
-      chapRow.push(`<td class="is-locked">${label}</td>`);
+      chapRow.push(`<td class="is-locked">${pilsaDayLabelHTML(indices)}</td>`);
       doneRow.push(`<td>-</td>`);
-    } else {
+    } else if (indices.length === 1){
+      const dayIndex = indices[0];
       const done = !!mySub[dayIndex];
-      chapRow.push(`<td data-day-index="${dayIndex}" data-done="${done}">${label}</td>`);
+      chapRow.push(`<td data-day-index="${dayIndex}" data-done="${done}">${pilsaDayLabelHTML(indices)}</td>`);
       // 열려 있어도 아직 안 온 날은 ❌ 대신 "-" (그 날짜가 되면 ❌)
       doneRow.push(done ? `<td class="is-done">⭕</td>` : d <= today ? `<td class="is-fail">❌</td>` : `<td>-</td>`);
+    } else {
+      // 하루에 여러 장 — 장마다 따로 눌러서 연다. 다 하면 ⭕, 일부만 했으면 "1/2"
+      const doneN = indices.filter(i => mySub[i]).length;
+      chapRow.push(`<td class="is-multi">${indices.map(i => {
+        const a = getAssignmentForDayIndex(i)[0];
+        return `<span class="week-multi${mySub[i] ? " is-done" : ""}" data-day-index="${i}" data-done="${!!mySub[i]}">${a.book}<br>${a.chapter}장</span>`;
+      }).join("")}</td>`);
+      doneRow.push(doneN === indices.length ? `<td class="is-done">⭕</td>`
+        : d <= today ? `<td class="is-fail">${doneN ? `${doneN}/${indices.length}` : "❌"}</td>`
+        : `<td>${doneN ? `${doneN}/${indices.length}` : "-"}</td>`);
     }
   });
 
@@ -408,7 +426,7 @@ async function renderWeek(){
      <tr class="row-chapter">${chapRow.join("")}</tr>
      <tr class="row-done">${doneRow.join("")}</tr>`;
 
-  table.querySelectorAll(".row-chapter td[data-day-index]").forEach(td => {
+  table.querySelectorAll(".row-chapter [data-day-index]").forEach(td => {
     td.addEventListener("click", () => {
       openPilsaPanel(Number(td.dataset.dayIndex), td.dataset.done === "true");
     });
@@ -843,7 +861,7 @@ function memoChecksOf(name){ return new Set((memoData && memoData.checks[name]) 
 function getMemoWeek(offset){
   const dates = getWeekDates(offset);
   const { startDate, startChapter } = memoData || {};
-  const slots = dates.map(d => getMemoVerseForDate(d, startDate, startChapter));
+  const slots = dates.map(d => getMemoVersesForDate(d, startDate, startChapter)); // 날마다 [절…] (없으면 [])
   return { dates, slots };
 }
 
@@ -855,17 +873,26 @@ function memoNoPlanMessage(){
 
 // 그 주에 지정된 절 중 체크된 비율 (지정된 절이 없으면 null)
 function calcMemoWeekPct(checks, slots){
-  const planned = slots.filter(Boolean);
+  const planned = slots.flat();
   if (!planned.length) return null;
   const done = planned.filter(s => checks.has(memoKey(s.chapter, s.verse))).length;
   return Math.round((done / planned.length) * 100);
 }
 
 // 체크했으면 ⭕, 아직 안 했는데 그 요일이 이미 됐으면 ❌, 아직 안 온 요일이면 -
+// 하루에 여러 절이면 다 체크해야 ⭕, 일부만이면 "1/2"
 function memoMarkCell(slot, checks, date, today){
-  if (!slot) return `<td>-</td>`;
-  if (checks.has(memoKey(slot.chapter, slot.verse))) return `<td class="is-done">⭕</td>`;
-  return date <= today ? `<td class="is-fail">❌</td>` : `<td>-</td>`;
+  if (!slot.length) return `<td>-</td>`;
+  const n = slot.filter(v => checks.has(memoKey(v.chapter, v.verse))).length;
+  if (n === slot.length) return `<td class="is-done">⭕</td>`;
+  const part = n ? `${n}/${slot.length}` : "";
+  return date <= today ? `<td class="is-fail">${part || "❌"}</td>` : `<td>${part || "-"}</td>`;
+}
+// 그 날 외울 절 표기 — 한 절이면 "9장<br>1절", 같은 장 여러 절이면 "9장<br>1·2절", 장이 넘어가면 "9:21<br>10:1"
+function memoDayLabelHTML(slot){
+  if (!slot.length) return "-";
+  if (slot.every(v => v.chapter === slot[0].chapter)) return `${slot[0].chapter}장<br>${slot.map(v => v.verse).join("·")}절`;
+  return slot.map(v => `${v.chapter}:${v.verse}`).join("<br>");
 }
 
 function showMemoSection(name){
@@ -941,9 +968,10 @@ function renderMemoWeekBox(){
   const doneRow = [`<th>완료</th>`];
   slots.forEach((slot, i) => {
     dayRow.push(`<td>${MEMO_DAY_LABELS[i]}</td>`);
-    verseRow.push(slot
-      ? `<td data-chapter="${slot.chapter}" data-verse="${slot.verse}">${slot.chapter}장<br>${slot.verse}절</td>`
-      : `<td>-</td>`);
+    verseRow.push(!slot.length ? `<td>-</td>`
+      : slot.length === 1 ? `<td data-chapter="${slot[0].chapter}" data-verse="${slot[0].verse}">${slot[0].chapter}장<br>${slot[0].verse}절</td>`
+      // 하루 여러 절 — 절마다 따로 눌러서 연다
+      : `<td class="is-multi">${slot.map(v => `<span class="week-multi" data-chapter="${v.chapter}" data-verse="${v.verse}">${v.chapter}:${v.verse}</span>`).join("")}</td>`);
     doneRow.push(memoMarkCell(slot, mine, dates[i], today));
   });
 
@@ -952,12 +980,12 @@ function renderMemoWeekBox(){
     `<tr class="row-day">${dayRow.join("")}</tr>
      <tr class="row-chapter">${verseRow.join("")}</tr>
      <tr class="row-done">${doneRow.join("")}</tr>`;
-  table.querySelectorAll("td[data-chapter]").forEach(td =>
+  table.querySelectorAll(".row-chapter [data-chapter]").forEach(td =>
     td.addEventListener("click", () => openMemoVerse(Number(td.dataset.chapter), Number(td.dataset.verse))));
 
   // 표 아래에는 배정이 없는 주일 때의 안내만 띄운다 (주간 진행률은 현황의 암기 탭에서 본다)
   const noteEl = document.getElementById("memo-week-pct");
-  const hasPlan = slots.some(Boolean);
+  const hasPlan = slots.some(x => x.length);
   noteEl.textContent = hasPlan ? "" : memoNoPlanMessage();
   noteEl.hidden = hasPlan;
 }
@@ -1694,7 +1722,7 @@ function renderMemoChapter(){
   const chapter = memoChapterNum;
   const count = REVELATION.verses[chapter - 1];
   const mine = memoChecksOf(getCurrentUser().name);
-  const thisWeek = new Set(getMemoWeek(0).slots.filter(Boolean).map(s => memoKey(s.chapter, s.verse)));
+  const thisWeek = new Set(getMemoWeek(0).slots.flat().map(s => memoKey(s.chapter, s.verse)));
 
   let doneCount = 0;
   const html = Array.from({ length: count }, (_, i) => {
@@ -2008,12 +2036,13 @@ function renderMemoStatusWeek(){
 
   const dayCells = MEMO_DAY_LABELS.map(d => `<td>${d}</td>`).join("");
   // 필사 탭의 "필사" 줄과 같은 모양(굵게, 두 줄)으로 — 탭을 넘겨도 박스 크기가 같게
-  const verseCells = slots.map(s => `<td>${s ? `${s.chapter}장<br>${s.verse}절` : "-"}</td>`).join("");
+  const verseCells = slots.map(s => `<td>${memoDayLabelHTML(s)}</td>`).join("");
   let doneTotal = 0;
   const rateCells = slots.map(s => {
-    if (!s || !users.length) return `<td>-</td>`;
-    const doneCount = checksByUser.filter(set => set.has(memoKey(s.chapter, s.verse))).length;
-    doneTotal += doneCount;
+    if (!s.length || !users.length) return `<td>-</td>`;
+    // 주간 달성률은 절 단위로, 요일 달성률은 그 날 절을 다 외운 사람 비율
+    s.forEach(v => { doneTotal += checksByUser.filter(set => set.has(memoKey(v.chapter, v.verse))).length; });
+    const doneCount = checksByUser.filter(set => s.every(v => set.has(memoKey(v.chapter, v.verse)))).length;
     return `<td>${Math.round((doneCount / users.length) * 100)}%</td>`;
   }).join("");
 
@@ -2022,7 +2051,7 @@ function renderMemoStatusWeek(){
      <tr class="row-label"><th>암기</th>${verseCells}</tr>
      <tr class="row-rate"><th>달성률</th>${rateCells}</tr>`;
 
-  const plannedCount = slots.filter(Boolean).length;
+  const plannedCount = slots.flat().length;
   const weekAvg = plannedCount && users.length
     ? Math.round((doneTotal / (plannedCount * users.length)) * 100) + "%"
     : "-";
@@ -2209,7 +2238,8 @@ document.querySelectorAll(".tabs__btn[data-admin-tab]").forEach(btn => {
     btn.classList.add("is-active");
     ["members","content","memoplan","memotests","gacha"].forEach(t =>
       document.getElementById(`admin-${t}`).hidden = t !== btn.dataset.adminTab);
-    if (btn.dataset.adminTab === "content") jumpToFirstEmptyChapter();
+    if (btn.dataset.adminTab === "content"){ jumpToFirstEmptyChapter(); loadAssignCal("pilsa"); }
+    if (btn.dataset.adminTab === "memoplan") loadAssignCal("memo");
     if (btn.dataset.adminTab === "memotests") loadAdminMemoTests();
     if (btn.dataset.adminTab === "gacha") loadAdminGacha(); // gacha.js
   });
@@ -2388,6 +2418,118 @@ function initMemberDragReorder(container){
     });
   });
 }
+
+/* ---------- 관리자: 필사 배정 / 암기 배정 달력 ----------
+   달마다 날짜 칸에 그 날 배정된 장(절)을 보여주고, 날짜를 누르면 그 날 개수를 바꾼다.
+   0 = 배정 안 함(다음 배정이 하루 밀림), 2·3 = 그 날 더 넣음(다음 배정이 당겨짐). 지난 날은 바꾸지 않는다 */
+const ASSIGN = {
+  pilsa: { unit: "장", month: "", startDate: "", startChapter: 0 },
+  memo:  { unit: "절", month: "", startDate: "", startChapter: 0 },
+};
+const assignOverrides = kind => kind === "memo" ? MEMO_OVERRIDES : PILSA_OVERRIDES;
+const assignBase = (kind, date) => (kind === "memo" ? memoBaseCount : pilsaBaseCount)(ASSIGN[kind].startDate)(date);
+// 그 날 배정된 것들의 짧은 이름 ["로마서 3장", …] / ["9:1", …]
+function assignItems(kind, date){
+  const a = ASSIGN[kind];
+  if (kind === "memo") return getMemoVersesForDate(date, a.startDate, a.startChapter).map(v => `${v.chapter}:${v.verse}`);
+  return dateToDayIndices(date, a.startDate).map(i => { const x = getAssignmentForDayIndex(i)[0]; return `${x.book} ${x.chapter}장`; });
+}
+async function loadAssignCal(kind){
+  const a = ASSIGN[kind], box = document.getElementById(`${kind}-assign`);
+  if (!a.month) a.month = toISODate(new Date()).slice(0, 7);
+  box.querySelector(".assign-cal__status").textContent = "불러오는 중…";
+  try {
+    const d = await api(kind === "memo" ? "/memorize" : "/status"); // 응답에 배정 변경값이 함께 온다 (api 참고)
+    a.startDate = d.startDate || "";
+    a.startChapter = d.startChapter || 0;
+    box.querySelector(".assign-cal__status").textContent = a.startDate ? "" : "아직 시작일이 정해지지 않았어요.";
+  } catch (err){ box.querySelector(".assign-cal__status").textContent = err.message; }
+  renderAssignCal(kind);
+}
+function renderAssignCal(kind){
+  const a = ASSIGN[kind], box = document.getElementById(`${kind}-assign`);
+  const [y, m] = a.month.split("-").map(Number);
+  box.querySelector(".assign-cal__month").textContent = `${y}년 ${m}월`;
+  const first = `${a.month}-01`;
+  const lead = new Date(y, m - 1, 1).getDay();
+  const days = new Date(y, m, 0).getDate();
+  const today = toISODate(new Date());
+  const ov = assignOverrides(kind);
+  const cells = ["일","월","화","수","목","금","토"].map(d => `<div class="assign-cal__dow">${d}</div>`);
+  for (let k = 0; k < lead; k++) cells.push(`<div class="assign-cal__day is-blank"></div>`);
+  for (let n = 1; n <= days; n++){
+    const date = addDays(first, n - 1);
+    const items = a.startDate ? assignItems(kind, date) : [];
+    const has = Object.prototype.hasOwnProperty.call(ov, date);
+    const cls = [date < today ? "is-past" : "", date === today ? "is-today" : "",
+      has && ov[date] === 0 ? "is-skip" : "", has && ov[date] > 1 ? "is-extra" : ""].filter(Boolean).join(" ");
+    const editable = a.startDate && date >= today && date >= a.startDate;
+    cells.push(`<${editable ? "button type=\"button\"" : "div"} class="assign-cal__day ${cls}" data-date="${date}">
+      <span class="assign-cal__num">${n}</span>
+      ${has && ov[date] === 0 ? `<span class="assign-cal__tag">제외</span>` : ""}
+      ${items.map(t => `<span class="assign-cal__item">${escapeHtml(t)}</span>`).join("")}
+    </${editable ? "button" : "div"}>`);
+  }
+  box.querySelector(".assign-cal__grid").innerHTML = cells.join("");
+}
+document.querySelectorAll(".assign-cal").forEach(box => {
+  const kind = box.id.split("-")[0];
+  box.addEventListener("click", e => {
+    const mv = e.target.closest("[data-cal-move]");
+    if (mv){
+      const a = ASSIGN[kind];
+      const [y, m] = a.month.split("-").map(Number);
+      const d = new Date(y, m - 1 + Number(mv.dataset.calMove), 1);
+      a.month = toISODate(d).slice(0, 7);
+      renderAssignCal(kind);
+      return;
+    }
+    const day = e.target.closest("button.assign-cal__day");
+    if (day) openAssignDay(kind, day.dataset.date);
+  });
+});
+
+// 날짜 하나 바꾸는 창
+const assignDay = { kind: "", date: "" };
+const assignDayModal = document.getElementById("assign-day-modal");
+function openAssignDay(kind, date){
+  Object.assign(assignDay, { kind, date });
+  const a = ASSIGN[kind], ov = assignOverrides(kind);
+  const [, m, d] = date.split("-").map(Number);
+  const dow = "일월화수목금토"[new Date(date + "T00:00:00").getDay()];
+  document.getElementById("assign-day-title").textContent = `${m}월 ${d}일 (${dow})`;
+  const items = assignItems(kind, date);
+  document.getElementById("assign-day-now").textContent = items.length ? `지금: ${items.join(", ")}` : "지금: 배정 없음";
+  const has = Object.prototype.hasOwnProperty.call(ov, date);
+  const cur = has ? ov[date] : assignBase(kind, date);
+  document.getElementById("assign-day-opts").innerHTML = [0, 1, 2, 3].map(n => `
+    <button type="button" class="assign-day__opt${n === cur ? " is-on" : ""}" data-count="${n}">${n === 0 ? "배정 안 함" : `하루 ${n}${a.unit}`}</button>`).join("");
+  document.getElementById("btn-assign-day-reset").hidden = !has;
+  assignDayModal.hidden = false;
+}
+async function saveAssignDay(count){
+  const { kind, date } = assignDay;
+  // 기본 규칙과 같은 개수면 따로 저장하지 않는다 (기본대로)
+  const send = count === null || count === assignBase(kind, date) ? null : count;
+  assignDayModal.hidden = true;
+  const box = document.getElementById(`${kind}-assign`);
+  box.querySelector(".assign-cal__status").textContent = "저장하는 중…";
+  try {
+    const r = kind === "memo"
+      ? await api("/memorize", { method: "POST", body: { action: "setMemoOverride", date, count: send } })
+      : await api("/admin", { method: "POST", body: { action: "setPilsaOverride", date, count: send } });
+    (kind === "memo" ? setMemoOverrides : setPilsaOverrides)(r.overrides);
+    box.querySelector(".assign-cal__status").textContent = "저장했어요. 뒤의 배정이 바뀐 대로 이어져요.";
+  } catch (err){ box.querySelector(".assign-cal__status").textContent = err.message; }
+  renderAssignCal(kind);
+}
+document.getElementById("assign-day-opts").addEventListener("click", e => {
+  const b = e.target.closest("[data-count]"); if (b) saveAssignDay(Number(b.dataset.count));
+});
+document.getElementById("btn-assign-day-reset").addEventListener("click", () => saveAssignDay(null));
+document.getElementById("btn-assign-day-close").addEventListener("click", () => { assignDayModal.hidden = true; });
+assignDayModal.addEventListener("click", e => { if (e.target === assignDayModal) assignDayModal.hidden = true; });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !assignDayModal.hidden) assignDayModal.hidden = true; });
 
 /* ---------- 관리자: 본문 입력 ---------- */
 // 책/장을 바꾸면(드롭다운 선택이든, 장 번호 직접 입력이든, 이전·다음 장 버튼이든) 그 자리에서

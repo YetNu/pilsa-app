@@ -62,12 +62,13 @@ exports.handler = async (event) => {
         reviewer: config.memo_reviewer || "",
         myTests,
         totalVerses: REVELATION_TOTAL_VERSES,
+        memoOverrides: config.memo_overrides || {},
       });
     }
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, chapter, verse, done, startDate, startChapter, strict, on, reviewer, from, to, answers, parts, name, at, ats } = JSON.parse(event.body || "{}");
+    const { action, chapter, verse, done, startDate, startChapter, strict, on, reviewer, from, to, answers, parts, name, at, ats, date, count } = JSON.parse(event.body || "{}");
 
     if (action === "check"){
       const user = requireUser(event);
@@ -89,6 +90,16 @@ exports.handler = async (event) => {
       if (!isValidRevelationVerse(startChapter, 1)) return json(400, { error: "시작 장을 선택해주세요." });
       await store.setConfig({ memo_start_date: startDate, memo_start_chapter: startChapter });
       return json(200, { ok: true, startDate, startChapter });
+    }
+
+    // 암기 배정 달력: 그 날 배정할 절 수 (0 = 배정 안 함, null = 기본대로)
+    if (action === "setMemoOverride"){
+      requireAdmin(event);
+      const okDate = /^\d{4}-\d{2}-\d{2}$/.test(String(date || ""));
+      const okCount = count === null || (Number.isInteger(count) && count >= 0 && count <= 5);
+      if (!okDate || !okCount) return json(400, { error: "잘못된 요청이에요." });
+      const overrides = await store.setScheduleOverride("memo", date, count);
+      return json(200, { ok: true, overrides });
     }
 
     if (action === "setStrict"){

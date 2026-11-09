@@ -333,7 +333,7 @@
 
       <div class="tabs">
         <button class="tabs__btn is-active" data-admin-tab="members">전체 회원</button>
-        <button class="tabs__btn" data-admin-tab="content">본문 입력</button>
+        <button class="tabs__btn" data-admin-tab="content">필사 설정</button>
         <button class="tabs__btn" data-admin-tab="memoplan">암기 설정</button>
         <button class="tabs__btn" data-admin-tab="memotests">시험 결과</button>
         <button class="tabs__btn" data-admin-tab="gacha">뽑기</button>
@@ -357,6 +357,19 @@
           placeholder="한 줄에 '절번호 내용'을 입력하세요.&#10;예) 1 예수 그리스도의 종 바울은 사도로 부르심을 받아..."></textarea>
         <p class="form-note" id="content-status"></p>
         <button class="btn btn--primary" id="btn-content-save">저장하기</button>
+
+        <!-- 필사 배정: 달력에서 날짜를 눌러 그 날 배정을 빼거나 장 수를 늘린다 -->
+        <section class="assign-cal" id="pilsa-assign">
+          <h4 class="assign-cal__title">필사 배정</h4>
+          <p class="form-note">날짜를 누르면 그 날을 배정에서 빼거나, 하루에 장을 더 넣을 수 있어요. 빼면 다음 장부터 다음 날로 밀리고, 더 넣으면 다음 날 배정이 그만큼 당겨져요.</p>
+          <div class="assign-cal__nav">
+            <button type="button" class="btn btn--ghost" data-cal-move="-1" aria-label="이전 달">‹</button>
+            <span class="assign-cal__month"></span>
+            <button type="button" class="btn btn--ghost" data-cal-move="1" aria-label="다음 달">›</button>
+          </div>
+          <div class="assign-cal__grid"></div>
+          <p class="form-note assign-cal__status"></p>
+        </section>
       </div>
       <div class="admin-panel" id="admin-memoplan" hidden>
         <p class="form-note" id="memoplan-status"></p>
@@ -385,6 +398,19 @@
           <p class="form-note">켜 두면 범위 암기 테스트를 친 사람은 채점 결과를 보지 않고 "제출"만 하고, 지정한 채점자가 "계시록 암기 → 시험 결과"에서 모든 사람의 채점 결과를 봐요. 끄면 각자 자기 채점 결과를 봐요.</p>
           <p class="form-note" id="memo-review-status"></p>
         </div>
+
+        <!-- 암기 배정: 달력에서 날짜를 눌러 그 날 배정을 빼거나 절 수를 늘린다 -->
+        <section class="assign-cal" id="memo-assign">
+          <h4 class="assign-cal__title">암기 배정</h4>
+          <p class="form-note">날짜를 누르면 그 날을 배정에서 빼거나, 하루에 절을 더 넣을 수 있어요. 빼면 다음 절부터 다음 날로 밀리고, 더 넣으면 다음 날 배정이 그만큼 당겨져요.</p>
+          <div class="assign-cal__nav">
+            <button type="button" class="btn btn--ghost" data-cal-move="-1" aria-label="이전 달">‹</button>
+            <span class="assign-cal__month"></span>
+            <button type="button" class="btn btn--ghost" data-cal-move="1" aria-label="다음 달">›</button>
+          </div>
+          <div class="assign-cal__grid"></div>
+          <p class="form-note assign-cal__status"></p>
+        </section>
       </div>
 
       <!-- 시험 결과 관리: 이름 → 그 사람의 시험 결과 목록(지우기) → 채점된 결과 보기 -->
@@ -484,6 +510,17 @@
       </div>
       <p class="memo-pick__hint" id="memo-pick-hint"></p>
       <div class="memo-pick__grid" id="memo-pick-grid"></div>
+    </div>
+  </div>
+
+  <!-- 배정 달력에서 날짜 하나 바꾸기 -->
+  <div class="modal-overlay" id="assign-day-modal" hidden>
+    <div class="modal-box assign-day" role="dialog" aria-modal="true" aria-labelledby="assign-day-title">
+      <button type="button" class="modal-close" id="btn-assign-day-close" aria-label="닫기">✕</button>
+      <h2 class="modal-box__title" id="assign-day-title"></h2>
+      <p class="assign-day__now" id="assign-day-now"></p>
+      <div class="assign-day__opts" id="assign-day-opts"></div>
+      <button type="button" class="btn btn--ghost assign-day__reset" id="btn-assign-day-reset" hidden>기본대로 되돌리기</button>
     </div>
   </div>
 
