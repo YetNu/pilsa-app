@@ -592,9 +592,23 @@ function revealTypingRow(row){
     window.scrollBy({ top: delta, behavior: "smooth" });
   };
   clearTimeout(revealTimer);
+  if (revealStop) revealStop();
   const keyboardAlreadyUp = Date.now() - lastVerseBlurAt < 200; // Enter 등으로 절에서 절로 바로 넘어온 경우
-  revealTimer = setTimeout(move, keyboardAlreadyUp ? 0 : 450);
+  // 그 칸에 아직 커서가 있을 때만 (다른 칸으로 옮겨 갔으면 그쪽이 알아서 맞춘다)
+  const moveIfFocused = () => { if (row.contains(document.activeElement)) move(); };
+  revealTimer = setTimeout(moveIfFocused, keyboardAlreadyUp ? 0 : 450);
+  // 키보드가 450ms보다 늦게 올라오면(폰마다, 전체화면일 때 등) 위 한 번으로는 아직 안 가려진 상태라
+  // 입력칸이 키보드 밑에 묻혔다. 보이는 영역 크기가 바뀌면(= 키보드가 다 올라오면) 한 번 더 확인한다.
+  // 이미 다 보이면 움직이지 않으니 화면이 출렁이지 않는다
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let settle = null;
+  const onResize = () => { clearTimeout(settle); settle = setTimeout(moveIfFocused, 120); };
+  vv.addEventListener("resize", onResize);
+  const stopAt = setTimeout(() => revealStop && revealStop(), 1600);
+  revealStop = () => { vv.removeEventListener("resize", onResize); clearTimeout(settle); clearTimeout(stopAt); revealStop = null; };
 }
+let revealStop = null; // 직전 칸의 키보드 대기를 끝내는 함수
 
 // PC 배치: 입력칸들은 자기 박스(#typing-area) 안에서 따로 스크롤된다. Enter로 다음 절로 넘어가거나
 // 글이 길어져 입력칸이 아래로 커질 때, 지금 쓰는 칸이 박스 아래(또는 위)로 잘려 보이지 않도록
