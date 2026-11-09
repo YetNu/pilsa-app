@@ -969,70 +969,96 @@ document.getElementById("memo-week-next").addEventListener("click", () => { memo
 // 지금 테스트 중인 범위 { chapter: 첫 장, parts: [{ chapter, from, to }], verses: [{ chapter, verse, text }] }
 let memoRange = null;
 
-/* 범위 고르기 — 줄마다 "계시록 [장] 장 : [시작] ~ [끝] 절". 0은 아직 안 고른 자리표시.
+/* 범위 고르기 — 줄마다 "계시록 [9장 1~12절]" 단추. 누르면 장 상자 → 그 장의 절 상자가 뜨고,
+   처음 누른 절이 시작, 다음 누른 절이 끝 (같은 절을 두 번 누르면 그 절 하나). 0은 아직 안 고른 것.
    보통은 한 줄(한 장)이고, 장이 이어지는 날은 ＋로 다음 장 줄을 붙인다 (붙인 줄은 ×로 뺀다) */
 let memoRangeParts = [{ chapter: 0, from: 0, to: 0 }];
 function renderMemoRangeParts(){
-  // 숫자는 직접 입력 (폰에서는 숫자 자판). 0은 아직 안 적은 칸이라 비워 둔다
-  const num = (k, v, label, ph) => `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off"
-    class="memo-range__num" data-k="${k}" value="${v || ""}" placeholder="${ph}" aria-label="${label}">`;
   document.getElementById("memo-range-parts").innerHTML = memoRangeParts.map((p, i) => `
       <div class="memo-range__part" data-i="${i}">
         ${i === 0 ? `<span class="memo-range__lead">계시록</span>`
           : `<span class="memo-range__lead"><button type="button" class="memo-range__remove" aria-label="이 범위 빼기" title="이 범위 빼기">×</button></span>`}
-        ${num("chapter", p.chapter, "장", "장")}
-        <span>장 :</span>
-        ${num("from", p.from, "시작 절", "절")}
-        <span>~</span>
-        ${num("to", p.to, "끝 절", "절")}
-        <span>절</span>
+        <button type="button" class="memo-range__choose${p.chapter && p.from ? "" : " is-empty"}">
+          ${p.chapter && p.from ? `${p.chapter}장 ${p.from === p.to ? `${p.from}절` : `${p.from}~${p.to}절`}` : "장·절 고르기"}
+        </button>
       </div>`).join("");
 }
-// 칸을 벗어날 때 맞는 숫자로 고친다 — 장은 1~22, 절은 그 장의 절 수까지, 시작 절이 끝 절보다 뒤면 서로 맞춘다
-function fixMemoRangePart(i){
-  const p = memoRangeParts[i];
-  const clamp = (v, max) => v ? Math.min(Math.max(v, 1), max) : 0;
-  p.chapter = clamp(p.chapter, REVELATION.verses.length);
-  const count = p.chapter ? REVELATION.verses[p.chapter - 1] : 99;
-  p.from = clamp(p.from, count); p.to = clamp(p.to, count);
-  if (p.from && p.to && p.from > p.to) p.to = p.from;
-  const row = document.querySelector(`.memo-range__part[data-i="${i}"]`);
-  if (row) row.querySelectorAll(".memo-range__num").forEach(inp => { inp.value = p[inp.dataset.k] || ""; });
-}
+function fixMemoRangePart(){ /* 상자에서 고르므로 고칠 숫자가 없다 */ }
 const memoRangeBox = document.getElementById("memo-range-parts");
-memoRangeBox.addEventListener("input", e => {
-  const inp = e.target.closest(".memo-range__num"); if (!inp) return;
-  const digits = inp.value.replace(/\D/g, "");
-  if (digits !== inp.value) inp.value = digits;
-  memoRangeParts[Number(inp.closest(".memo-range__part").dataset.i)][inp.dataset.k] = Number(digits) || 0;
-});
-memoRangeBox.addEventListener("change", e => {
-  const inp = e.target.closest(".memo-range__num");
-  if (inp) fixMemoRangePart(Number(inp.closest(".memo-range__part").dataset.i));
-});
-// Enter: 다음 칸으로 (마지막 칸이면 자판을 내린다)
-memoRangeBox.addEventListener("keydown", e => {
-  if (e.key !== "Enter" || !e.target.classList.contains("memo-range__num")) return;
-  e.preventDefault();
-  const all = [...memoRangeBox.querySelectorAll(".memo-range__num")];
-  const next = all[all.indexOf(e.target) + 1];
-  if (next){ next.focus(); next.select(); } else e.target.blur();
-});
-memoRangeBox.addEventListener("focusin", e => { if (e.target.classList.contains("memo-range__num")) e.target.select(); });
 memoRangeBox.addEventListener("click", e => {
-  const b = e.target.closest(".memo-range__remove"); if (!b) return;
-  memoRangeParts.splice(Number(b.closest(".memo-range__part").dataset.i), 1);
-  renderMemoRangeParts();
+  const rm = e.target.closest(".memo-range__remove");
+  if (rm){ memoRangeParts.splice(Number(rm.closest(".memo-range__part").dataset.i), 1); renderMemoRangeParts(); return; }
+  const ch = e.target.closest(".memo-range__choose");
+  if (ch) openMemoPick(Number(ch.closest(".memo-range__part").dataset.i));
 });
 document.getElementById("btn-memo-range-add").addEventListener("click", () => {
-  // 바로 앞 줄의 다음 장 1절부터 — 끝 절만 적으면 되게 그 칸에 바로 커서 (마지막 장 다음은 없음)
+  // 바로 앞 줄의 다음 장 절 상자를 바로 띄운다 (마지막 장 다음은 없으니 장부터)
   const last = memoRangeParts[memoRangeParts.length - 1];
   const chapter = last.chapter && last.chapter < REVELATION.verses.length ? last.chapter + 1 : 0;
-  memoRangeParts.push({ chapter, from: chapter ? 1 : 0, to: 0 });
+  memoRangeParts.push({ chapter, from: 0, to: 0 });
   renderMemoRangeParts();
-  const row = memoRangeBox.querySelector(`.memo-range__part[data-i="${memoRangeParts.length - 1}"]`);
-  row.querySelector(`[data-k="${chapter ? "to" : "chapter"}"]`).focus();
+  openMemoPick(memoRangeParts.length - 1);
 });
+
+/* ----- 장·절 상자 창 ----- */
+const memoPick = { i: 0, chapter: 0, start: 0 };
+const memoPickModal = document.getElementById("memo-pick-modal");
+function openMemoPick(i){
+  memoPick.i = i;
+  memoPick.chapter = memoRangeParts[i].chapter || 0;
+  memoPick.start = 0;
+  memoPickModal.hidden = false;
+  renderMemoPick();
+}
+function closeMemoPick(){
+  memoPickModal.hidden = true;
+  // ＋로 붙였다가 아무것도 고르지 않고 닫은 줄은 뺀다
+  const p = memoRangeParts[memoPick.i];
+  if (memoPick.i > 0 && p && !p.from){ memoRangeParts.splice(memoPick.i, 1); renderMemoRangeParts(); }
+}
+function renderMemoPick(){
+  const grid = document.getElementById("memo-pick-grid");
+  const title = document.getElementById("memo-pick-title"), hint = document.getElementById("memo-pick-hint");
+  document.getElementById("btn-memo-pick-back").hidden = !memoPick.chapter;
+  if (!memoPick.chapter){
+    title.textContent = "요한계시록";
+    hint.textContent = "장을 고르세요";
+    grid.innerHTML = REVELATION.verses.map((_, k) => {
+      const used = memoRangeParts.some((p, j) => j !== memoPick.i && p.chapter === k + 1 && p.from);
+      return `<button type="button" class="memo-pick__cell${used ? " is-used" : ""}" data-chapter="${k + 1}">${k + 1}</button>`;
+    }).join("");
+    return;
+  }
+  const count = REVELATION.verses[memoPick.chapter - 1];
+  title.textContent = `요한계시록 ${memoPick.chapter}장`;
+  hint.innerHTML = memoPick.start ? `<b>${memoPick.start}절</b>부터 — 끝 절을 누르세요` : "시작 절을 누르세요";
+  const cur = memoRangeParts[memoPick.i];
+  const keep = !memoPick.start && cur.chapter === memoPick.chapter && cur.from; // 전에 고른 범위를 옅게 보여준다
+  grid.innerHTML = Array.from({ length: count }, (_, k) => {
+    const v = k + 1;
+    const cls = memoPick.start === v ? " is-start" : keep && v >= cur.from && v <= cur.to ? " is-prev" : "";
+    return `<button type="button" class="memo-pick__cell${cls}" data-verse="${v}">${v}</button>`;
+  }).join("");
+}
+document.getElementById("memo-pick-grid").addEventListener("click", e => {
+  const c = e.target.closest(".memo-pick__cell"); if (!c) return;
+  if (c.dataset.chapter){ memoPick.chapter = Number(c.dataset.chapter); memoPick.start = 0; renderMemoPick(); return; }
+  const v = Number(c.dataset.verse);
+  if (!memoPick.start){ memoPick.start = v; renderMemoPick(); return; }
+  // 두 번째로 누른 절이 끝 — 앞쪽을 눌렀으면 서로 바꾼다
+  const from = Math.min(memoPick.start, v), to = Math.max(memoPick.start, v);
+  Object.assign(memoRangeParts[memoPick.i], { chapter: memoPick.chapter, from, to });
+  // 고른 범위를 잠깐 칠해 보여주고 닫는다
+  document.querySelectorAll("#memo-pick-grid .memo-pick__cell").forEach(b => {
+    const n = Number(b.dataset.verse); b.classList.toggle("is-in", n >= from && n <= to);
+  });
+  renderMemoRangeParts();
+  setTimeout(() => { memoPickModal.hidden = true; }, 220);
+});
+document.getElementById("btn-memo-pick-back").addEventListener("click", () => { memoPick.chapter = 0; memoPick.start = 0; renderMemoPick(); });
+document.getElementById("btn-memo-pick-close").addEventListener("click", closeMemoPick);
+memoPickModal.addEventListener("click", e => { if (e.target === memoPickModal) closeMemoPick(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !memoPickModal.hidden) closeMemoPick(); });
 
 // 시험 범위 이름·절 이름 — 한 장짜리 예전 기록은 parts가 없어서 chapter/from/to로 만든다
 function memoPartsOf(t){ return t.parts && t.parts.length ? t.parts : [{ chapter: t.chapter, from: t.from, to: t.to }]; }

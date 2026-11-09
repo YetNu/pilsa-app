@@ -474,6 +474,19 @@
   </div>
 
   <!-- ============ 확인 모달 ("정말 제출할까요?" 등) ============ -->
+  <!-- 암기 테스트 범위 고르기: 장 상자 → 그 장의 절 상자 (처음 누른 절 = 시작, 다음 누른 절 = 끝) -->
+  <div class="modal-overlay" id="memo-pick-modal" hidden>
+    <div class="modal-box memo-pick" role="dialog" aria-modal="true" aria-labelledby="memo-pick-title">
+      <button type="button" class="modal-close" id="btn-memo-pick-close" aria-label="닫기">✕</button>
+      <div class="memo-pick__head">
+        <button type="button" class="memo-pick__back" id="btn-memo-pick-back" aria-label="장 다시 고르기" hidden>‹</button>
+        <h2 class="modal-box__title memo-pick__title" id="memo-pick-title">요한계시록</h2>
+      </div>
+      <p class="memo-pick__hint" id="memo-pick-hint"></p>
+      <div class="memo-pick__grid" id="memo-pick-grid"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="confirm-modal" hidden>
     <div class="modal-box modal-box--alert" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-message">
       <p id="confirm-modal-message" class="modal-box__message"></p>
