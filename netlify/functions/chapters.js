@@ -24,7 +24,10 @@ exports.handler = async (event) => {
       if (!book || !Number.isInteger(chapter) || !Array.isArray(verses)){
         return json(400, { error: "잘못된 요청이에요." });
       }
-      await store.setChapterVerses(book, chapter, verses);
+      const clean = verses
+        .filter(v => v && Number.isInteger(v.verse) && v.verse > 0)
+        .map(v => ({ verse: v.verse, content: String(v.content || "") }));
+      await store.setChapterVerses(String(book), chapter, clean);
       return json(200, { ok: true });
     }
 

@@ -7,9 +7,13 @@ exports.handler = async (event) => {
   if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
   try {
-    const { name, password, passwordConfirm } = JSON.parse(event.body || "{}");
+    const body = JSON.parse(event.body || "{}");
+    const { password, passwordConfirm } = body;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
 
-    if (!name || !password) return json(400, { error: "이름과 비밀번호를 입력해주세요." });
+    if (!name || typeof password !== "string" || !password) return json(400, { error: "이름과 비밀번호를 입력해주세요." });
+    // 이름은 다른 사람 화면(현황·관리자)에 그대로 보이므로 길이와 글자를 제한한다
+    if (name.length > 20 || /[<>&"'`\\\u0000-\u001f]/.test(name)) return json(400, { error: "이름은 20자 이내로, 특수문자 없이 적어주세요." });
     if (password !== passwordConfirm) return json(400, { error: "비밀번호가 일치하지 않아요." });
     if (!PW_RULE.test(password)) return json(400, { error: "비밀번호는 영어+숫자+특수문자 포함 8자 이상이어야 해요." });
 

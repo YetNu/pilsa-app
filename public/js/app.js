@@ -42,6 +42,8 @@ async function api(path, { method = "GET", body } = {}){
 function logout(){
   AUTH.token = null;
   AUTH.user = null;
+  // 같은 기기에서 다른 사람이 이어서 로그인해도 앞사람 것이 보이지 않게
+  weekData = null; statusData = null; memoData = null;
   showView("view-auth");
 }
 
@@ -52,6 +54,8 @@ let openAssignment = null;   // 현재 펼쳐진 (날짜, 배정쌍)
 /* ---------- 화면 전환 ---------- */
 const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-gacha", "view-admin"];
 function showView(id){
+  // 뽑기 화면에 새로 들어올 때는 setGachaViewActive가 남은 기회를 직접 확인한다 (아래에서 한 번 더 부르지 않게)
+  const enteringGacha = id === "view-gacha" && document.getElementById("view-gacha").hidden;
   views.forEach(v => document.getElementById(v).hidden = (v !== id));
   document.getElementById("topbar").hidden = (id === "view-auth");
   const me = getCurrentUser();
@@ -70,7 +74,7 @@ function showView(id){
   // gacha.js — 뽑기 화면에 들어오면 기계를 돌리고, 나가면 멈춘다
   if (typeof setGachaViewActive === "function") setGachaViewActive(id === "view-gacha");
   // gacha.js — 화면을 옮길 때마다 남은 뽑기 기회를 다시 확인 (첫 화면은 gacha.js가 읽힌 뒤 직접 확인)
-  if (typeof refreshGachaChip === "function") refreshGachaChip();
+  if (typeof refreshGachaChip === "function" && !enteringGacha) refreshGachaChip();
 }
 
 /* ---------- 회원가입 모달 ---------- */
@@ -226,7 +230,7 @@ async function renderStatus(){
   let data;
   try { data = await api("/status"); }
   catch (err){
-    list.innerHTML = `<p class="form-error">${err.message}</p>`;
+    list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     document.getElementById("status-week-avg").textContent = "";
     return;
   }
@@ -259,7 +263,7 @@ function renderStatusList(){
     return `
       <div class="status-card">
         <div class="status-card__head">
-          <span class="status-card__name">${u.name}<span class="status-card__nick">${u.nickname ? "· " + u.nickname : ""}</span></span>
+          <span class="status-card__name">${escapeHtml(u.name)}<span class="status-card__nick">${u.nickname ? "· " + escapeHtml(u.nickname) : ""}</span></span>
           <span class="status-card__pct">진행률 <span class="status-card__pct-num">${pct}%</span></span>
         </div>
         <table>
@@ -368,15 +372,17 @@ function getWeekDates(offset){
   });
 }
 
-async function renderWeek(){
+// reload=false: 주만 옮길 때는 방금 받은 현황을 그대로 쓴다 (화살표를 누를 때마다 서버를 다시 부르지 않게)
+let weekData = null;
+async function renderWeek(reload = true){
   const days = getWeekDates(weekOffset);
   document.getElementById("week-range").textContent = `${days[0]} ~ ${days[6]}`;
   const table = document.getElementById("week-table");
 
-  let data;
-  try { data = await api("/status"); }
+  let data = reload ? null : weekData;
+  try { if (!data) data = weekData = await api("/status"); }
   catch (err){
-    table.querySelector("tbody").innerHTML = `<tr><td class="form-error">${err.message}</td></tr>`;
+    table.querySelector("tbody").innerHTML = `<tr><td class="form-error">${escapeHtml(err.message)}</td></tr>`;
     return;
   }
 
@@ -436,8 +442,8 @@ async function renderWeek(){
   document.getElementById("pilsa-panel").hidden = true;
 }
 
-document.getElementById("week-prev").addEventListener("click", () => { weekOffset--; renderWeek(); });
-document.getElementById("week-next").addEventListener("click", () => { weekOffset++; renderWeek(); });
+document.getElementById("week-prev").addEventListener("click", () => { weekOffset--; renderWeek(false); });
+document.getElementById("week-next").addEventListener("click", () => { weekOffset++; renderWeek(false); });
 
 function renderIncompleteWarning(startDate, sub){
   const warnEl = document.getElementById("week-warning");
@@ -461,7 +467,7 @@ function findOldestIncompleteDayIndex(startDate, sub){
 document.getElementById("btn-jump-oldest").addEventListener("click", async () => {
   const me = getCurrentUser();
   let data;
-  try { data = await api("/status"); } catch { return; }
+  try { data = weekData = await api("/status"); } catch { return; }
   const sub = data.submissions[me.name] || {};
   const idx = findOldestIncompleteDayIndex(data.startDate, sub);
   if (idx === null) return;
@@ -470,7 +476,7 @@ document.getElementById("btn-jump-oldest").addEventListener("click", async () =>
   const target = new Date(targetDate);
   const diffWeeks = Math.floor((startOfWeek(target) - startOfWeek(today0)) / (7 * 86400000));
   weekOffset = diffWeeks;
-  await renderWeek();
+  await renderWeek(false); // 방금 받은 현황으로 그린다
   openPilsaPanel(idx, false); // 그 주로 이동만 하지 않고, 가장 오래된 미완료 필사를 바로 열어준다
 });
 function startOfWeek(d){ const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }
@@ -498,7 +504,7 @@ async function openPilsaPanel(dayIndex, done){
     );
     verses = results.flatMap((r, i) => r.verses.map(v => ({ ...v, book: pair[i].book, chapter: pair[i].chapter })));
   } catch (err) {
-    document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-error">${err.message}</p>`;
+    document.getElementById("pilsa-panel__text").innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
 
@@ -515,7 +521,7 @@ async function openPilsaPanel(dayIndex, done){
     verses.map((v, i) => `
       <div class="source-row" data-source-idx="${i}">
         <span class="verse-input-row__num">${v.verse}절</span>
-        <div class="source-row__text">${v.text}</div>
+        <div class="source-row__text">${escapeHtml(v.text)}</div>
       </div>`).join("") +
     `<div class="pilsa-panel__text-spacer" aria-hidden="true"></div>`;
 
@@ -590,7 +596,9 @@ function isPhoneLayout(){ return window.matchMedia(PHONE_LAYOUT_QUERY).matches; 
 // 또 한 번 움직여서 브라우저 자체 스크롤·키보드 애니메이션과 겹쳐 꿀렁거렸다)
 let revealTimer = null;
 let lastVerseBlurAt = 0; // 방금 다른 절 입력칸에 있었는지(= 키보드가 이미 올라와 있는지) 판단용
-function revealTypingRow(row){
+// pin=true(암기 시험): 보이든 말든 지금 쓰는 칸을 늘 화면 위쪽 같은 자리에 둔다 — 칸을 넘길 때마다 한 줄씩만
+// 일정하게 올라가서, 칸이 키보드 쪽으로 점점 내려가다 한꺼번에 튀어 오르는 일이 없다
+function revealTypingRow(row, pin){
   if (!isPhoneLayout()) return;
   const TOP_MARGIN = 72; // 인앱 브라우저가 화면 위에 띄우는 주소창 등에 가리지 않을 만큼의 여유
   const move = () => {
@@ -600,7 +608,7 @@ function revealTypingRow(row){
     const topLimit = viewTop + TOP_MARGIN;
     const bottomLimit = viewTop + viewHeight - 10;
     const rect = row.getBoundingClientRect();
-    if (rect.top >= topLimit - 4 && rect.bottom <= bottomLimit) return; // 이미 다 보이면 그대로 둔다
+    if (!pin && rect.top >= topLimit - 4 && rect.bottom <= bottomLimit) return; // 이미 다 보이면 그대로 둔다
 
     let delta = rect.top - topLimit;
     // 절이 길어서 원문+입력칸이 한 화면에 다 안 들어가면 입력칸 아래쪽이 보이는 쪽을 우선한다
@@ -661,8 +669,10 @@ function preventPasteOn(textarea){
   });
 }
 
+// 속성 값("…") 안에도 넣으므로 따옴표까지 바꾼다
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 function escapeHtml(s){
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => HTML_ESCAPES[c]);
 }
 
 // 오타 판정 기준은 문장 전체가 아니라 "띄어쓰기 전까지"(어절) 단위 — 한 단어를 다 쓰고
@@ -702,9 +712,17 @@ function renderVerseOverlay(overlayEl, typed, sourceText, finalize){
 // 브라우저가 스크롤 위치를 당겨버리는데, 글자 하나 칠 때마다 이게 반복되면 화면이 위아래로 출렁인다 —
 // 그래서 재기 전 스크롤 위치를 기억했다가 그대로 되돌린다. 반환: 칸이 커졌는지(true/false)
 function resizeTextareaKeepingScroll(textarea){
+  const before = textarea.offsetHeight;
+  const len = textarea.value.length, shorter = len < (textarea._len || 0);
+  textarea._len = len;
+  // 글이 늘기만 했으면 줄이지 않고 필요한 만큼만 키운다 — 이때는 페이지 높이가 잠깐도 줄지 않아 화면이 흔들릴 일이 없다
+  // (처음 잴 때와 글을 지웠을 때만 아래처럼 "auto"로 줄였다가 다시 잰다)
+  if (textarea.style.height && !shorter){
+    if (textarea.scrollHeight > textarea.clientHeight) textarea.style.height = textarea.scrollHeight + "px";
+    return textarea.offsetHeight > before;
+  }
   const box = document.getElementById("typing-area");
   const pageY = window.scrollY, boxTop = box.scrollTop;
-  const before = textarea.offsetHeight;
   textarea.style.height = "auto";
   textarea.style.height = textarea.scrollHeight + "px";
   if (window.scrollY !== pageY) window.scrollTo(0, pageY);
@@ -745,7 +763,7 @@ function buildTypingArea(){
     row.innerHTML = `
       <span class="verse-input-row__num">${v.verse}절</span>
       <div class="verse-input-row__main">
-        <div class="verse-input-row__source">${v.text}</div>
+        <div class="verse-input-row__source">${escapeHtml(v.text)}</div>
         <div class="verse-input-row__box">
           <div class="verse-input-row__overlay" aria-hidden="true"></div>
           <textarea class="verse-input-row__textarea" rows="1" data-verse="${v.verse}"
@@ -904,7 +922,7 @@ async function renderMemo(){
   const grid = document.getElementById("memo-chapter-grid");
   grid.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   try { memoData = await api("/memorize"); }
-  catch (err){ grid.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  catch (err){ grid.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
   renderMemoHome();
 }
 
@@ -1139,7 +1157,7 @@ async function startMemoRange(){
   btn.disabled = true;
 
   try { await Promise.all([...new Set(parts.map(p => p.chapter))].map(getRevelationChapterText)); }
-  catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; btn.disabled = false; return; }
+  catch (err){ list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; btn.disabled = false; return; }
   finally { btn.disabled = false; }
 
   const verses = [];
@@ -1158,6 +1176,7 @@ async function startMemoRange(){
 function buildMemoRangeRows(focusFirst = true){
   const list = document.getElementById("memo-range-list");
   list.innerHTML = "";
+  list.classList.add("is-writing"); // 폰: 마지막 절도 화면 위쪽까지 올라올 수 있게 아래에 여백을 둔다 (style.css)
   const textareas = [];
 
   memoRange.verses.forEach((v, i) => {
@@ -1182,12 +1201,13 @@ function buildMemoRangeRows(focusFirst = true){
       if (resizeTextareaKeepingScroll(textarea)) keepGrowingInputVisible(textarea);
     });
     textarea.addEventListener("blur", () => { lastVerseBlurAt = Date.now(); });
-    textarea.addEventListener("focus", () => revealTypingRow(row));
+    textarea.addEventListener("focus", () => revealTypingRow(row, true));
     textarea.addEventListener("keydown", e => {
       if (e.key !== "Enter") return;
       e.preventDefault();
       const next = textareas.slice(i + 1).find(t => !t.disabled);
-      if (next) next.focus(); else textarea.blur();
+      // 브라우저가 제멋대로 한 번 옮기고 우리가 또 옮기면 화면이 두 번 움직인다 — 자리는 revealTypingRow만 잡는다
+      if (next) next.focus({ preventScroll: true }); else textarea.blur();
     });
     textareas.push(textarea);
   });
@@ -1237,6 +1257,7 @@ function gradeMemoRange(){
     resultEl.hidden = false;
   });
   document.getElementById("memo-range-legend").hidden = false;
+  document.getElementById("memo-range-list").classList.remove("is-writing");
 
   const summary = document.getElementById("memo-range-summary");
   summary.innerHTML = gradedMemoSummaryHTML(counts.ok + counts.space, counts.wrong, counts.skipped, counts.words);
@@ -1523,7 +1544,7 @@ async function openMemoReview(){
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   try {
     memoReviewTests = (memoData = await api("/memorize")).myTests || [];
-  } catch (err){ list.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  } catch (err){ list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
   if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : "아직 기록이 없어요."}</p>`; return; }
 
   // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
@@ -1674,7 +1695,7 @@ async function openChapterTextModal(chapter){
 
   let texts;
   try { texts = await getRevelationChapterText(chapter); }
-  catch (err){ if (chapterTextOpenFor === chapter) body.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  catch (err){ if (chapterTextOpenFor === chapter) body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
   if (chapterTextOpenFor !== chapter || modal.hidden) return;
 
   body.innerHTML = Array.from({ length: REVELATION.verses[chapter - 1] }, (_, i) => {
@@ -1779,7 +1800,7 @@ async function openMemoVerse(chapter, verse, startMode){
   let verses;
   try { verses = await getRevelationChapterText(chapter); }
   catch (err){
-    if (memoOpen === open) textEl.innerHTML = `<p class="form-error">${err.message}</p>`;
+    if (memoOpen === open) textEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
   if (memoOpen !== open) return; // 불러오는 사이에 다른 절/화면으로 이동함
@@ -2000,7 +2021,7 @@ async function renderMemoStatus(){
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   try { memoData = await api("/memorize"); }
   catch (err){
-    list.innerHTML = `<p class="form-error">${err.message}</p>`;
+    list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     document.getElementById("memo-status-week-avg").textContent = "";
     return;
   }
@@ -2049,7 +2070,7 @@ function renderMemoStatusWeek(){
     return `
       <div class="status-card">
         <div class="status-card__head">
-          <span class="status-card__name">${u.name}<span class="status-card__nick">${u.nickname ? "· " + u.nickname : ""}</span></span>
+          <span class="status-card__name">${escapeHtml(u.name)}<span class="status-card__nick">${u.nickname ? "· " + escapeHtml(u.nickname) : ""}</span></span>
           <span class="status-card__pct status-card__pct--memo">주간 <span class="status-card__pct-num">${pct === null ? "-" : pct + "%"}</span>
             · 전체 <span class="status-card__pct-num">${checks.size}</span>/${REVELATION_TOTAL_VERSES}</span>
         </div>
@@ -2260,7 +2281,7 @@ async function renderAdmin(){
 
   let data;
   try { data = await api("/admin"); }
-  catch (err){ membersEl.innerHTML = `<p class="form-error">${err.message}</p>`; return; }
+  catch (err){ membersEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
 
   renderAdminMembers(data.users);
   loadAdminMemoPlan();
@@ -2268,19 +2289,19 @@ async function renderAdmin(){
 
 // 승인 대기 회원 한 줄 (전체 회원 탭 맨 아래)
 function pendingRowsHTML(pending){
-  return pending.map(u => `
+  return pending.map(u => { const name = escapeHtml(u.name); return `
     <div class="admin-row admin-row--pending">
-      <span class="admin-row__name">${u.name} <small class="admin-row__state admin-row__state--pending">승인 대기</small></span>
-      <input type="text" placeholder="별명" data-nick="${u.name}">
-      <button class="btn btn--primary" data-approve="${u.name}">승인</button>
-      <button class="btn btn--ghost" data-reject="${u.name}">거절</button>
-    </div>`).join("");
+      <span class="admin-row__name">${name} <small class="admin-row__state admin-row__state--pending">승인 대기</small></span>
+      <input type="text" placeholder="별명" data-nick="${name}">
+      <button class="btn btn--primary" data-approve="${name}">승인</button>
+      <button class="btn btn--ghost" data-reject="${name}">거절</button>
+    </div>`; }).join("");
 }
 
 function bindPendingActions(el){
   el.querySelectorAll("[data-approve]").forEach(btn => btn.addEventListener("click", async () => {
     const name = btn.dataset.approve;
-    const nick = el.querySelector(`[data-nick="${name}"]`).value.trim();
+    const nick = btn.closest(".admin-row").querySelector("[data-nick]").value.trim(); // 이름으로 찾으면 따옴표가 든 이름에서 깨진다
     btn.disabled = true;
     try {
       await api("/admin", { method: "POST", body: { action: "approve", name, nickname: nick } });
@@ -2303,12 +2324,13 @@ function renderAdminMembers(users){
   const el = document.getElementById("admin-members");
   el.innerHTML = members.map(u => {
     const active = u.status === "approved";
+    const name = escapeHtml(u.name);
     return `
-    <div class="admin-row admin-row--draggable${active ? "" : " is-inactive"}" data-name="${u.name}">
+    <div class="admin-row admin-row--draggable${active ? "" : " is-inactive"}" data-name="${name}">
       <span class="drag-handle" title="드래그해서 순서 변경">⠿</span>
-      <span class="admin-row__name">${u.name}${active ? "" : ` <small class="admin-row__state">비활성</small>`}</span>
-      <input type="text" value="${u.nickname}" data-editnick="${u.name}">
-      <button class="btn btn--ghost" data-set-active="${u.name}" data-active="${!active}">${active ? "비활성화" : "활성화"}</button>
+      <span class="admin-row__name">${name}${active ? "" : ` <small class="admin-row__state">비활성</small>`}</span>
+      <input type="text" value="${escapeHtml(u.nickname)}" data-editnick="${name}">
+      <button class="btn btn--ghost" data-set-active="${name}" data-active="${!active}">${active ? "비활성화" : "활성화"}</button>
     </div>`;
   }).join("") || `<p class="form-note">회원이 없어요.</p>`;
 
@@ -2572,6 +2594,7 @@ document.getElementById("btn-content-save").addEventListener("click", async () =
   statusEl.textContent = "저장 중…";
   try {
     await api("/chapters", { method: "POST", body: { book, chapter, verses } });
+    if (book === REVELATION.book) delete memoTextCache[chapter]; // 암기 화면이 고친 본문을 다시 불러오게
     statusEl.textContent = `저장 완료 — ${book} ${chapter}장, ${verses.length}개 절.`;
   } catch (err) {
     statusEl.textContent = err.message;

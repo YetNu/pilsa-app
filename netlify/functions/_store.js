@@ -44,6 +44,33 @@ function cacheClear(key){
   cache[key] = null;
 }
 
+// 시트는 줄 끝의 빈 칸을 잘라서 돌려준다 — 그대로 다시 쓰면 그 칸은 덮어쓰지 않아 예전 값이 남으므로 칸 수를 맞춘다
+function padRow(row, width){
+  const out = row.slice(0, width);
+  while (out.length < width) out.push("");
+  return out;
+}
+
+// 표의 데이터 줄을 통째로 바꾼다 (firstRow행부터). 먼저 지우고 쓰면 쓰기가 실패했을 때 표가 빈 채로 남으므로,
+// 새 내용을 먼저 덮어쓴 다음 남는 아랫줄만 지운다. oldCount: 지금 있는 데이터 줄 수(모르면 생략 — 아래를 끝까지 지운다)
+async function replaceRows(sheets, title, lastCol, firstRow, rows, oldCount){
+  const width = lastCol.charCodeAt(0) - 64; // "A" → 1
+  if (rows.length){
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID, range: `${title}!A${firstRow}`, valueInputOption: "RAW",
+      requestBody: { values: rows.map(r => padRow(r, width)) },
+    });
+  }
+  if (oldCount === undefined || oldCount > rows.length){
+    try {
+      await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `${title}!A${firstRow + rows.length}:${lastCol}` });
+    } catch (err) {
+      // 새 내용이 시트의 마지막 줄까지 찼으면 그 아래는 지울 줄이 없다
+      if (!/exceeds grid limits/i.test((err && err.message) || "")) throw err;
+    }
+  }
+}
+
 /* ---------- Users ---------- */
 
 async function getUsers(){
@@ -96,9 +123,11 @@ async function updateUser(name, patch){
 
 async function removeUser(name){
   const sheets = await getSheetsClient();
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const [meta, res] = await Promise.all([
+    sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: "sheets.properties(sheetId,title)" }),
+    sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Users!A2:A" }),
+  ]);
   const sheet = meta.data.sheets.find(s => s.properties.title === "Users");
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "Users!A2:A" });
   const rows = (res.data.values || []).flat();
   const idx = rows.indexOf(name);
   if (idx === -1) return false;
@@ -122,11 +151,10 @@ async function reorderUsers(orderedNames){
   const rows = res.data.values || [];
   const byName = new Map(rows.map(r => [r[0], r]));
   const reordered = orderedNames.map(name => byName.get(name)).filter(Boolean);
-  const remaining = rows.filter(r => !orderedNames.includes(r[0]));
-  const allRows = [...reordered, ...remaining];
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID, range: "Users!A2:E", valueInputOption: "RAW", requestBody: { values: allRows },
-  });
+  const moved = new Set(reordered.map(r => r[0])); // 같은 이름이 두 번 와도 한 번만
+  const remaining = rows.filter(r => !moved.has(r[0]));
+  const allRows = [...new Set(reordered), ...remaining];
+  await replaceRows(sheets, "Users", "E", 2, allRows, rows.length);
   cacheClear("users");
 }
 
@@ -274,12 +302,7 @@ async function setChapterVerses(book, chapter, verses){
   const newRows = verses.map(v => [book, chapter, v.verse, v.content]);
   const allRows = [...remaining, ...newRows];
 
-  await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: "Chapters!A2:D" });
-  if (allRows.length){
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID, range: "Chapters!A2:D", valueInputOption: "RAW", requestBody: { values: allRows },
-    });
-  }
+  await replaceRows(sheets, "Chapters", "D", 2, allRows, rows.length);
   cacheClear("chapters");
 }
 
@@ -399,17 +422,15 @@ async function markMemoTestsSeen(name, ats){
   const sheets = await getSheetsClient();
   const rows = await readMemoRows(sheets, "MemoTests!A2:H");
   const now = new Date().toISOString();
-  let count = 0;
-  for (let i = 0; i < rows.length; i++){
-    const r = rows[i];
-    if (r[0] !== name || !ats.includes(r[1]) || !r[6] || r[7]) continue;
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID, range: `MemoTests!H${i + 2}`, valueInputOption: "RAW",
-      requestBody: { values: [[now]] },
-    });
-    count++;
+  const data = [];
+  rows.forEach((r, i) => {
+    if (r[0] !== name || !ats.includes(r[1]) || !r[6] || r[7]) return;
+    data.push({ range: `MemoTests!H${i + 2}`, values: [[now]] });
+  });
+  if (data.length){ // 여러 줄이어도 한 번에 쓴다
+    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: "RAW", data } });
   }
-  return count;
+  return data.length;
 }
 
 // 관리자: 시험 기록 한 줄 지우기 (이름 + 제출시각으로 찾음)
@@ -461,11 +482,7 @@ const DEFAULT_GACHA_SET = "1"; // 뽑기 종류를 나누기 전에 만든 항�
 
 // 표 전체를 머리글부터 다시 쓴다 (줄을 지우거나 끼워 넣을 때)
 async function rewriteSheet(sheets, title, lastCol, rows){
-  await withSheet(sheets, title, () => sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `${title}!A1:${lastCol}` }));
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID, range: `${title}!A1`, valueInputOption: "RAW",
-    requestBody: { values: [MEMO_SHEETS[title], ...rows] },
-  });
+  await withSheet(sheets, title, () => replaceRows(sheets, title, lastCol, 1, [MEMO_SHEETS[title], ...rows]));
 }
 
 // 반환: [{ id, name }]

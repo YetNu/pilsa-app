@@ -8,7 +8,7 @@ exports.handler = async (event) => {
 
   try {
     const { name, password } = JSON.parse(event.body || "{}");
-    if (!name || !password) return json(400, { error: "이름과 비밀번호를 입력해주세요." });
+    if (typeof name !== "string" || typeof password !== "string" || !name || !password) return json(400, { error: "이름과 비밀번호를 입력해주세요." });
 
     const users = await store.getUsers();
     const user = users.find(u => u.name === name);
@@ -17,7 +17,7 @@ exports.handler = async (event) => {
     if (user.status === "inactive") return json(403, { error: "비활성화된 계정이에요. 관리자에게 문의해주세요." });
     if (user.status !== "approved") return json(403, { error: "관리자 승인 대기 중이에요." });
 
-    const match = await bcrypt.compare(password, user.passwordHash);
+    const match = await bcrypt.compare(password, user.passwordHash || "");
     if (!match) return json(401, { error: "이름 또는 비밀번호가 올바르지 않아요." });
 
     const token = jwt.sign(

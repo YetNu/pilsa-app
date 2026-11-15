@@ -22,11 +22,20 @@ function getAuth(){
   });
 }
 
-async function getSheetsClient(){
-  assertConfigured();
-  const auth = getAuth();
-  await auth.authorize();
-  return google.sheets({ version: "v4", auth });
+// 인증된 클라이언트는 컨테이너가 살아 있는 동안 한 번만 만든다 — 예전에는 시트를 읽고 쓸 때마다
+// 구글에 토큰을 새로 받아 와서(요청 하나에 3~4번씩) 그만큼 느렸다. 토큰이 만료되면 라이브러리가 알아서 갱신한다.
+let clientPromise = null;
+function getSheetsClient(){
+  if (!clientPromise){
+    clientPromise = (async () => {
+      assertConfigured();
+      const auth = getAuth();
+      await auth.authorize();
+      return google.sheets({ version: "v4", auth });
+    })();
+    clientPromise.catch(() => { clientPromise = null; }); // 실패한 인증은 기억하지 않고 다음 요청에서 다시 시도
+  }
+  return clientPromise;
 }
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;

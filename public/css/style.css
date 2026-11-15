@@ -180,9 +180,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   text-align:center;
   box-shadow: 0 6px 24px rgba(var(--shadow-rgb),.08);
 }
-.auth-card__mark{ font-size:1.6rem; color: var(--gold); margin-bottom:.2em; }
-.auth-card__title{ font-size:1.9rem; }
-.auth-card__sub{ color:var(--ink-soft); font-size:.85rem; margin-bottom:1.6em; }
+.auth-card__title{ font-size:1.9rem; margin-bottom:.9em; }
 
 .tabs{ display:flex; border-bottom:1px solid var(--rule); margin-bottom:1.4em; }
 .tabs__btn{
@@ -819,6 +817,8 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   .verse-input-row{ gap:6px; }
   .verse-input-row__num{ width:30px; padding-top:7px; font-size:.78rem; }
   .memo-range__summary{ padding-left:36px; } /* 폰 배치: "N절" 칸 30px + 간격 6px */
+  /* 암기 시험을 쓰는 동안: 지금 쓰는 칸을 늘 화면 위쪽에 두므로(app.js revealTypingRow), 마지막 절도 거기까지 올라오게 아래 여백 */
+  #memo-range:has(#memo-range-list.is-writing){ padding-bottom: 75vh; } /* 제출 단추 아래에 둬서, 단추는 마지막 절 바로 밑에 그대로 */
   .memo-range__answer-label{ right:calc(100% + 6px); width:30px; padding-top:13px; font-size:.78rem; }
   .verse-input-row__source{
     display:block;

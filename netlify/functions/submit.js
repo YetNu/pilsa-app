@@ -36,7 +36,7 @@ exports.handler = async (event) => {
       const r = rows[i];
       const s = source[i];
       if (!s) continue; // 원문보다 더 많이 입력한 절은 번호로 짚어줄 수 없음
-      if (!r || r.verse !== s.verse || normalizeVerseText(r.content) !== normalizeVerseText(s.text)){
+      if (!r || r.verse !== s.verse || typeof r.content !== "string" || normalizeVerseText(r.content) !== normalizeVerseText(s.text)){
         ok = false;
         wrongVerses.push(s.verse);
       }
