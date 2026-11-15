@@ -907,3 +907,5 @@ button.assign-cal__day:hover{ border-color: var(--ink-soft); }
 /* 절마다 오답 수 (X 표시 아래) / 요약의 절 수는 작게 */
 .memo-range__wn{ position:absolute; left:50%; top:calc(100% + 11px); transform:translateX(-50%); font-size:.68rem; font-weight:700; color: var(--red-ink); white-space:nowrap; }
 .memo-range__sub{ font-size:.85em; color: var(--ink-soft); }
+/* 테스트(시험)를 시작하면 범위 고르는 상자는 감춘다 — 처음 화면으로 돌아오거나 테스트를 닫으면 다시 보인다 */
+#memo-range:has(#memo-range-panel:not([hidden])) .memo-range__picker{ display:none; }
