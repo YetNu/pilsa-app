@@ -1892,7 +1892,7 @@ function diffWords(typed, source){
   const { aKeep, bKeep } = diffChars(tw, sw); // 배열도 그대로 받아 단어끼리 비교
   const tOut = [], sOut = [];
   const red = w => '<span class="is-wrong">' + escapeHtml(w) + "</span>";
-  let wrongWords = 0; // 오답 수 — 같은 자리에서 틀린 단어 묶음마다 내 글·원문 중 많은 쪽 단어 수
+  let wrongWords = 0; // 오답 수 — 같은 자리에서 틀린 묶음마다 정답(원문) 쪽 단어 수. 원문에 없는 단어를 더 쓴 자리만 내 글 쪽 단어 수
   let i = 0, j = 0;
   while (i < tw.length || j < sw.length){
     const ti = i, sj = j;
@@ -1921,11 +1921,11 @@ function diffWords(typed, source){
       }
       tOut.push(...tHead, ...a.map(red), ...tTail);
       sOut.push(...sHead, ...b.map(red), ...sTail);
-      wrongWords += Math.max(a.length, b.length);
+      wrongWords += b.length || a.length;
     } else {
       tOut.push(...tg.map(red));
       sOut.push(...sg.map(red));
-      wrongWords += Math.max(tg.length, sg.length);
+      wrongWords += sg.length || tg.length;
     }
     if (i < tw.length) tOut.push(escapeHtml(tw[i]));
     if (j < sw.length) sOut.push(escapeHtml(sw[j]));
