@@ -919,6 +919,7 @@ function renderMemoHome(){
   document.getElementById("btn-memo-range-label").textContent = testName;
   document.getElementById("btn-memo-range").title = testName;
   document.getElementById("memo-range-title").textContent = testName;
+  document.getElementById("btn-memo-range-start").textContent = memoReviewOn() ? "시험 시작" : "테스트 시작";
   renderMemoWeekBox();
 
   const mine = memoChecksOf(getCurrentUser().name);
