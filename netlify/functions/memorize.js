@@ -10,15 +10,13 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 //        (시작일부터 시작 장 1절부터 한 절씩 자동 배정된다 — 2026-10-25부터는 매일)
 // POST { action: "setStrict", strict }                → 관리자 전용, 범위 암기 테스트 보호 켜기/끄기
 //        (전체화면 필수 · 다른 화면에 다녀오면 답 지우기 · 분할 화면 막기)
-// POST { action: "setReview", on, reviewer }         → 관리자 전용, 범위 암기 테스트를 채점자 한 명에게 보내기 켜기/끄기와 채점자 지정
+// POST { action: "setReview", on }                   → 관리자 전용, 시험 모드 켜기/끄기
 // POST { action: "submitTest", chapter, from, to, parts?, answers: [{ chapter?, verse, text }] }
-//        (parts: 여러 장에 걸친 시험이면 [{ chapter, from, to }…] — 이때 답안마다 chapter) → 채점자에게 보내기가 켜져 있을 때 테스트 제출 (시험 결과에 남는다)
-// GET  ?tests=1                                       → 지정된 채점자만: 아직 결과를 보내지 않은 테스트 목록 (보낸 것은 채점자 목록에서 빠짐)
-// POST { action: "sendResult", name, at }            → 채점자만: 그 사람에게 채점 결과 보내기
+//        (parts: 여러 장에 걸친 시험이면 [{ chapter, from, to }…] — 이때 답안마다 chapter) → 시험 모드일 때 시험 제출 (시험 결과에 남고, 낸 사람은 바로 결과를 본다)
 // POST { action: "ackResults", ats: [제출시각…] }     → 본인: 받은 결과를 확인함 (기록은 남기고 "확인" 표시만)
 // GET  ?all=1                                        → 관리자: 모든 사람의 시험 기록 (시험 결과 관리)
 // POST { action: "deleteTest", name, at }            → 관리자: 시험 기록 하나 지우기
-// GET 응답의 myTests: 내 시험 결과 — pending이면 채점자에게 제출하고 결과를 기다리는 중, seen이 비어 있으면 받은 결과를 아직 열어 보지 않은 것
+// GET 응답의 myTests: 내 시험 결과 (모두 결과까지)
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "GET" && (event.queryStringParameters || {}).all){
@@ -26,15 +24,6 @@ exports.handler = async (event) => {
       const [tests, users] = await Promise.all([store.getMemoTests(), store.getUsers()]);
       const approved = users.filter(u => u.status === "approved").map(u => ({ name: u.name, nickname: u.nickname || "" }));
       return json(200, { tests, users: approved });
-    }
-
-    if (event.httpMethod === "GET" && (event.queryStringParameters || {}).tests){
-      const user = requireUser(event);
-      const config = await store.getConfig();
-      if (config.memo_review_on !== "1" || !config.memo_reviewer || user.name !== config.memo_reviewer){
-        return json(403, { error: "채점자로 지정된 사람만 볼 수 있어요." });
-      }
-      return json(200, { tests: (await store.getMemoTests()).filter(t => !t.sent) });
     }
 
     if (event.httpMethod === "GET"){
@@ -45,11 +34,9 @@ exports.handler = async (event) => {
         store.getConfig(),
         store.getMemoTests(),
       ]);
-      // 채점자에게 제출하고 아직 결과를 못 받은 것은 pending — 답안은 결과를 받은 뒤에만 내려준다
+      // 내 시험 결과 — 시험 모드에서는 내자마자 결과를 보므로 모두 그대로 내려준다
       const myTests = tests.filter(t => t.name === me.name)
-        .map(({ at, chapter, from, to, parts, answers, sent, seen }) => sent
-          ? { at, chapter, from, to, parts, answers, seen }
-          : { at, chapter, from, to, parts, answers: [], seen: "", pending: true });
+        .map(({ at, chapter, from, to, parts, answers, seen }) => ({ at, chapter, from, to, parts, answers, seen: seen || at }));
       const approvedUsers = users
         .filter(u => u.status === "approved")
         .map(u => ({ name: u.name, nickname: u.nickname || "" }));
@@ -58,8 +45,8 @@ exports.handler = async (event) => {
         startDate: config.memo_start_date || "",
         startChapter: Number(config.memo_start_chapter) || MEMO_DEFAULT_START_CHAPTER,
         strict: config.memo_strict !== "0",
-        reviewOn: config.memo_review_on === "1" && !!config.memo_reviewer,
-        reviewer: config.memo_reviewer || "",
+        // 시험 모드 (Config의 memo_review_on을 그대로 쓴다 — 예전 "채점자에게 보내기" 스위치 자리)
+        reviewOn: config.memo_review_on === "1",
         myTests,
         totalVerses: REVELATION_TOTAL_VERSES,
         memoOverrides: config.memo_overrides || {},
@@ -68,7 +55,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, chapter, verse, done, startDate, startChapter, strict, on, reviewer, from, to, answers, parts, name, at, ats, date, count } = JSON.parse(event.body || "{}");
+    const { action, chapter, verse, done, startDate, startChapter, strict, on, from, to, answers, parts, name, at, ats, date, count } = JSON.parse(event.body || "{}");
 
     if (action === "check"){
       const user = requireUser(event);
@@ -109,25 +96,11 @@ exports.handler = async (event) => {
       return json(200, { ok: true, strict });
     }
 
+    // 시험 모드 켜기/끄기 — 켜면 범위 암기 테스트가 "암기 시험"이 되어 결과가 기록되고, 친 사람은 바로 자기 결과를 본다
     if (action === "setReview"){
       requireAdmin(event);
       if (typeof on !== "boolean") return json(400, { error: "잘못된 요청이에요." });
-      const name = (reviewer || "").trim();
-      if (on){
-        const users = await store.getUsers();
-        if (!users.some(u => u.name === name && u.status === "approved")) return json(400, { error: "채점자를 선택해주세요." });
-      }
-      await store.setConfig({ memo_review_on: on, memo_reviewer: name });
-      return json(200, { ok: true });
-    }
-
-    if (action === "sendResult"){
-      const user = requireUser(event);
-      const config = await store.getConfig();
-      if (config.memo_review_on !== "1" || user.name !== config.memo_reviewer) return json(403, { error: "채점자로 지정된 사람만 보낼 수 있어요." });
-      if (!name || !at) return json(400, { error: "잘못된 요청이에요." });
-      const ok = await store.markMemoTestSent(name, at);
-      if (!ok) return json(404, { error: "이미 확인했거나 없는 테스트예요." });
+      await store.setConfig({ memo_review_on: on });
       return json(200, { ok: true });
     }
 
@@ -141,7 +114,7 @@ exports.handler = async (event) => {
     if (action === "submitTest"){
       const user = requireUser(event);
       const config = await store.getConfig();
-      if (config.memo_review_on !== "1") return json(400, { error: "지금은 채점자에게 보내지 않아요. 새로고침 후 다시 해주세요." });
+      if (config.memo_review_on !== "1") return json(400, { error: "지금은 시험 모드가 아니에요. 새로고침 후 다시 해주세요." });
       // 범위 목록 — 예전처럼 한 장이면 chapter/from/to 하나
       const ranges = Array.isArray(parts) && parts.length ? parts : [{ chapter, from, to }];
       const validRange = p => p && Number.isInteger(p.chapter) && Number.isInteger(p.from) && Number.isInteger(p.to) && p.from <= p.to
@@ -156,7 +129,9 @@ exports.handler = async (event) => {
         .filter(a => a && Number.isInteger(a.verse) && inRange(multi ? a.chapter : clean[0].chapter, a.verse))
         .map(a => multi ? { chapter: a.chapter, verse: a.verse, text: String(a.text || "").slice(0, 2000) }
                         : { verse: a.verse, text: String(a.text || "").slice(0, 2000) });
-      await store.addMemoTest({ name: user.name, at: new Date().toISOString(), ...clean[0], parts: multi ? clean : null, answers: cleanAnswers });
+      // 낸 사람이 바로 결과를 보므로 보냄·확인도 같은 시각으로 채운다
+      const at = new Date().toISOString();
+      await store.addMemoTest({ name: user.name, at, sent: at, seen: at, ...clean[0], parts: multi ? clean : null, answers: cleanAnswers });
       return json(200, { ok: true });
     }
 

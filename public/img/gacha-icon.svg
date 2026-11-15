@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 뽑기 아이콘 — 캡슐 뽑기 기계 (앱의 뽑기 기계와 같은 살구·주황 색) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff6ec"/>
+      <stop offset="1" stop-color="#ffe3c6"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.7" stop-color="#fff7ef"/>
+      <stop offset="1" stop-color="#ffe6cf"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb066"/>
+      <stop offset="1" stop-color="#ee8a33"/>
+    </linearGradient>
+    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffbf80"/>
+      <stop offset="1" stop-color="#f29a4a"/>
+    </linearGradient>
+    <radialGradient id="b1" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#ffb3d3"/><stop offset="1" stop-color="#ff6fae"/></radialGradient>
+    <radialGradient id="b2" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#9fd8ff"/><stop offset="1" stop-color="#3fa9f5"/></radialGradient>
+    <radialGradient id="b3" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#ffe49a"/><stop offset="1" stop-color="#ffc53d"/></radialGradient>
+    <radialGradient id="b4" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#9ff0c4"/><stop offset="1" stop-color="#45cc85"/></radialGradient>
+    <radialGradient id="b5" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#d6c2ff"/><stop offset="1" stop-color="#a77bf3"/></radialGradient>
+    <clipPath id="dome"><circle cx="256" cy="200" r="132"/></clipPath>
+  </defs>
+
+  <!-- 바탕 -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+
+  <!-- 뚜껑 -->
+  <rect x="226" y="44" width="60" height="22" rx="11" fill="#f29a4a"/>
+  <rect x="150" y="60" width="212" height="34" rx="17" fill="url(#cap)"/>
+
+  <!-- 유리 돔과 공 -->
+  <circle cx="256" cy="200" r="132" fill="url(#glass)" stroke="#f5c79c" stroke-width="8"/>
+  <g clip-path="url(#dome)">
+    <circle cx="190" cy="270" r="40" fill="url(#b1)"/>
+    <circle cx="276" cy="282" r="40" fill="url(#b2)"/>
+    <circle cx="350" cy="250" r="38" fill="url(#b3)"/>
+    <circle cx="232" cy="206" r="38" fill="url(#b4)"/>
+    <circle cx="316" cy="186" r="34" fill="url(#b5)"/>
+    <circle cx="170" cy="190" r="32" fill="url(#b3)"/>
+    <!-- 공 가운데 줄 (캡슐 이음새) -->
+    <g fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="5" stroke-linecap="round">
+      <path d="M152 272 q38 14 76 -4"/>
+      <path d="M238 286 q38 14 76 -4"/>
+      <path d="M314 254 q36 13 72 -4"/>
+      <path d="M196 208 q36 13 72 -4"/>
+    </g>
+  </g>
+  <!-- 유리 반짝임 -->
+  <path d="M168 132 a110 110 0 0 1 72 -50" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" opacity=".9"/>
+  <circle cx="160" cy="160" r="8" fill="#ffffff" opacity=".9"/>
+
+  <!-- 몸통 -->
+  <rect x="150" y="318" width="212" height="22" rx="10" fill="#f29a4a"/>
+  <rect x="134" y="334" width="244" height="136" rx="30" fill="url(#body)"/>
+  <!-- 손잡이 -->
+  <circle cx="214" cy="400" r="34" fill="#fff4e8" stroke="#d9680a" stroke-width="6"/>
+  <rect x="190" y="394" width="48" height="12" rx="6" fill="#d9680a"/>
+  <!-- 나오는 구멍과 캡슐 하나 -->
+  <rect x="270" y="372" width="78" height="66" rx="16" fill="#c95e08"/>
+  <circle cx="309" cy="416" r="20" fill="url(#b1)"/>
+  <path d="M290 418 q19 8 38 -2" fill="none" stroke="#ffffff" stroke-opacity=".6" stroke-width="4" stroke-linecap="round"/>
+</svg>

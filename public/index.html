@@ -187,7 +187,7 @@
             </svg>
             <span class="memo-test-box__label" id="btn-memo-range-label">암기 테스트</span>
           </button>
-          <!-- 시험 결과 — 채점자: 모든 사람의 시험 / 그 외: 내 시험(하나라도 있을 때) -->
+          <!-- 시험 결과 — 내 시험(하나라도 있을 때) -->
           <button type="button" class="memo-chapter-box memo-test-box" id="btn-memo-review" title="시험 결과" hidden>
             <svg class="memo-test-box__icon" viewBox="0 0 48 48" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <rect x="8" y="6" width="28" height="36" rx="3" fill="var(--card)"/>
@@ -256,7 +256,7 @@
 
       </div>
 
-      <!-- 시험 결과(채점자: 모든 사람 / 그 외: 나): 범위 암기 테스트 기록을 채점된 모습으로 -->
+      <!-- 시험 결과(나): 범위 암기 시험 기록을 채점된 모습으로 -->
       <div id="memo-review" hidden>
         <div class="memo-head">
           <button class="btn btn--ghost btn-back" id="btn-memo-review-back">‹ 전체 장</button>
@@ -274,9 +274,6 @@
           </div>
           <div class="verse-input-list" id="memo-review-rows"></div>
           <p class="memo-range__summary" id="memo-review-summary"></p>
-          <div class="pilsa-panel__actions">
-            <button type="button" class="btn btn--primary" id="btn-memo-send-result">결과 보내기</button>
-          </div>
         </div>
       </div>
 
@@ -385,17 +382,14 @@
           <p class="form-note" id="memo-strict-status"></p>
         </div>
 
-        <!-- 범위 암기 테스트를 채점자 한 명에게 보내기 -->
+        <!-- 시험 모드: 켜면 범위 암기 테스트가 "암기 시험"이 되어 결과가 기록되고, 친 사람은 바로 자기 결과를 본다 -->
         <div class="memoplan-strict">
           <label class="memo-keep-test">
             <input type="checkbox" id="memo-review-on">
             <span class="memo-keep-test__switch" aria-hidden="true"></span>
-            <span>채점자에게 보내기</span>
+            <span>시험 모드</span>
           </label>
-          <label class="memoplan-reviewer">채점자
-            <select id="memo-reviewer"></select>
-          </label>
-          <p class="form-note">켜 두면 범위 암기 테스트를 친 사람은 채점 결과를 보지 않고 "제출"만 하고, 지정한 채점자가 "계시록 암기 → 시험 결과"에서 모든 사람의 채점 결과를 봐요. 끄면 각자 자기 채점 결과를 봐요.</p>
+          <p class="form-note">켜 두면 "암기 테스트"가 "암기 시험"으로 바뀌고, 제출하면 바로 자기 채점 결과를 보면서 그 결과가 "시험 결과"에 기록돼요. 끄면 기록 없이 연습으로 채점만 해요.</p>
           <p class="form-note" id="memo-review-status"></p>
         </div>
 

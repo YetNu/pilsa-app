@@ -432,7 +432,7 @@ async function addMemoTest(test){
   const sheets = await getSheetsClient();
   const append = () => sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID, range: "MemoTests!A2:I", valueInputOption: "RAW",
-    requestBody: { values: [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), "", "",
+    requestBody: { values: [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), test.sent || "", test.seen || "",
       test.parts && test.parts.length > 1 ? JSON.stringify(test.parts) : ""]] },
   });
   try { await append(); }
