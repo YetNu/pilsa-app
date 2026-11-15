@@ -903,3 +903,7 @@ button.assign-cal__day:hover{ border-color: var(--ink-soft); }
 .assign-day__opt:hover{ border-color: var(--ink-soft); }
 .assign-day__opt.is-on{ background: rgba(var(--accent-rgb),.25); border-color: rgba(var(--accent-rgb),.9); }
 .assign-day__reset{ width:100%; margin-top:10px; }
+
+/* 절마다 오답 수 (X 표시 아래) / 요약의 절 수는 작게 */
+.memo-range__wn{ position:absolute; left:50%; top:calc(100% + 11px); transform:translateX(-50%); font-size:.68rem; font-weight:700; color: var(--red-ink); white-space:nowrap; }
+.memo-range__sub{ font-size:.85em; color: var(--ink-soft); }

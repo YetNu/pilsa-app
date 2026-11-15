@@ -1198,7 +1198,7 @@ function buildMemoRangeRows(focusFirst = true){
 function gradeMemoRange(){
   if (!memoRange) return;
   const rows = [...document.querySelectorAll("#memo-range-list .verse-input-row")];
-  const counts = { ok: 0, space: 0, wrong: 0, skipped: 0 };
+  const counts = { ok: 0, space: 0, wrong: 0, skipped: 0, words: 0 };
 
   // 채점하면 입력칸을 감추고, 그 자리에 내가 쓴 답(틀린 곳 표시)을 바로 보여준다. 맞았는지는 왼쪽 "N절" 아래
   // ⭕/❌ 로만 표시하고, 틀렸거나 띄어쓰기가 다르면 그 아래에 정답. 다시 쓰려면 "다시하기" (입력칸이 새로 만들어진다)
@@ -1211,9 +1211,9 @@ function gradeMemoRange(){
     if (v.text === null){ counts.skipped++; resultEl.hidden = true; return; }
     input.blur();
     box.hidden = true;
-    const markNum = pass => {
-      row.querySelector(".verse-input-row__num").innerHTML =
-        `<span class="memo-range__numlabel">${memoVerseLabel(memoRange.parts.length > 1, v.chapter, v.verse)}<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span>`;
+    const markNum = (pass, words) => {
+      counts.words += words;
+      row.querySelector(".verse-input-row__num").innerHTML = memoNumLabelHTML(memoVerseLabel(memoRange.parts.length > 1, v.chapter, v.verse), pass, words);
     };
     // 정답 상자 — "정답" 글자는 위가 아니라 왼쪽 "N절" 칸 자리에 (style.css .memo-range__answer 참고)
     const answer = html => `<div class="memo-range__answer"><span class="memo-range__answer-label">정답</span><div class="memo-result__text">${html}</div></div>`;
@@ -1221,7 +1221,7 @@ function gradeMemoRange(){
     if (!normalizeVerseText(input.value)){
       counts.wrong++;
       row.classList.add("is-wrong");
-      markNum(false);
+      markNum(false, memoWordCount(v.text));
       resultEl.innerHTML = `<div class="memo-result__text memo-range__typed is-empty"></div>${answer(escapeHtml(normalizeVerseText(v.text)))}`;
       resultEl.hidden = false;
       return;
@@ -1230,16 +1230,15 @@ function gradeMemoRange(){
     const g = gradeMemoAnswer(input.value, v.text);
     counts[g.status]++;
     row.classList.add(`is-${g.status}`);
-    markNum(g.status !== "wrong");
+    markNum(g.status !== "wrong", g.wrongWords);
     const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
     resultEl.innerHTML = g.status !== "wrong" ? typed : typed + answer(g.sourceHTML);
     resultEl.hidden = false;
   });
   document.getElementById("memo-range-legend").hidden = false;
 
-  const graded = counts.ok + counts.space + counts.wrong;
   const summary = document.getElementById("memo-range-summary");
-  summary.innerHTML = `${graded}개 절 중 <b>⭕ ${counts.ok + counts.space}개</b> · <b>❌ ${counts.wrong}개</b>${counts.skipped ? ` · 본문 미등록 ${counts.skipped}개` : ""}`;
+  summary.innerHTML = gradedMemoSummaryHTML(counts.ok + counts.space, counts.wrong, counts.skipped, counts.words);
   summary.hidden = false;
   memoRangeFinished = true;
   setMemoRangeAction("retry");
@@ -1531,7 +1530,7 @@ async function openMemoReview(){
   const nameOf = n => { const u = (memoData.users || []).find(x => x.name === n); return u && u.nickname ? `${n} · ${u.nickname}` : n; };
 
   list.innerHTML = memoReviewTests.map((t, i) => {
-    const { ok, wrong } = t.pending ? { ok: 0, wrong: 0 } : scoreMemoTest(t);
+    const { words } = t.pending ? { words: 0 } : scoreMemoTest(t);
     const when = new Date(t.at);
     const whenText = isNaN(when) ? "" : `${when.getMonth() + 1}월 ${when.getDate()}일 ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
     return `
@@ -1540,7 +1539,7 @@ async function openMemoReview(){
           ? `<span class="memo-review-item__name">${escapeHtml(nameOf(t.name))}${t.sent ? ` <small class="memo-review-item__sent">결과 보냄</small>` : ""}</span>
              <span class="memo-review-item__range">${memoRangeLabel(memoPartsOf(t))}</span>`
           : `<span class="memo-review-item__name">${memoRangeLabel(memoPartsOf(t))}<span class="memo-review-item__date">${whenText}</span>${!t.pending && !t.seen ? ` <small class="memo-review-item__new">새 결과</small>` : ""}</span>`}
-        <span class="memo-review-item__score">${t.pending ? `<small class="memo-review-item__wait">채점 대기</small>` : `⭕ ${ok} · ❌ ${wrong}`}</span>
+        <span class="memo-review-item__score">${t.pending ? `<small class="memo-review-item__wait">채점 대기</small>` : `오답 ${words}개`}</span>
         ${memoReviewMode === "all" ? `<span class="memo-review-item__when">${whenText}</span>` : ""}
       </button>`;
   }).join("");
@@ -1560,46 +1559,56 @@ function memoTestVerses(t){
   }
   return out;
 }
+// 비워 둔 절의 오답 수 = 원문 단어 수
+function memoWordCount(text){ return normalizeVerseText(text).split(" ").filter(Boolean).length; }
+// 절 번호 옆 표시: 맞으면 동그라미, 틀리면 X와 그 절의 오답 수
+function memoNumLabelHTML(label, pass, words){
+  return `<span class="memo-range__numlabel">${label}<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span>${words ? `<small class="memo-range__wn">오답 ${words}</small>` : ""}</span>`;
+}
+// 결과 요약 — 오답은 띄어쓰기로 나눈 단어 단위로 센다
+function gradedMemoSummaryHTML(ok, wrong, skipped, words){
+  return `<b>오답 ${words}개</b> <span class="memo-range__sub">(${ok + wrong}개 절 중 ⭕ ${ok} · ❌ ${wrong})</span>${skipped ? ` · 본문 미등록 ${skipped}개` : ""}`;
+}
 // 한 사람의 테스트를 채점 — 띄어쓰기만 다른 건 통과, 비워 둔 절은 오답, 본문 미등록 절은 빼고 센다
 function scoreMemoTest(t){
-  let ok = 0, wrong = 0;
+  let ok = 0, wrong = 0, words = 0;
   for (const { src, answer: a } of memoTestVerses(t)){
     if (!src) continue;
-    if (!a || !normalizeVerseText(a.text)){ wrong++; continue; }
-    if (gradeMemoAnswer(a.text, src.text).status === "wrong") wrong++; else ok++;
+    if (!a || !normalizeVerseText(a.text)){ wrong++; words += memoWordCount(src.text); continue; }
+    const g = gradeMemoAnswer(a.text, src.text);
+    if (g.status === "wrong") wrong++; else ok++;
+    words += g.wrongWords;
   }
-  return { ok, wrong };
+  return { ok, wrong, words };
 }
 
 // 제출된 테스트 하나를 채점된 모습으로: "N절" 위 빨간 동그라미/X, 쓴 답(틀린 곳 표시), 틀리면 정답
 function renderGradedMemoTest(t){
   const answerBox = html => `<div class="memo-range__answer"><span class="memo-range__answer-label">정답</span><div class="memo-result__text">${html}</div></div>`;
   const multi = memoPartsOf(t).length > 1;
-  let ok = 0, wrong = 0, skipped = 0;
+  let ok = 0, wrong = 0, skipped = 0, words = 0;
   const rows = [];
   for (const { chapter, verse: v, src, answer: a } of memoTestVerses(t)){
     if (!src){ skipped++; continue; }
-    let pass, status, body;
+    let pass, status, body, n;
     if (!a || !normalizeVerseText(a.text)){
-      pass = false; status = "wrong";
+      pass = false; status = "wrong"; n = memoWordCount(src.text);
       body = `<div class="memo-result__text memo-range__typed is-empty"></div>${answerBox(escapeHtml(normalizeVerseText(src.text)))}`;
     } else {
       const g = gradeMemoAnswer(a.text, src.text);
-      pass = g.status !== "wrong"; status = g.status;
+      pass = g.status !== "wrong"; status = g.status; n = g.wrongWords;
       const typed = `<div class="memo-result__text memo-range__typed">${g.typedHTML}</div>`;
       body = g.status !== "wrong" ? typed : typed + answerBox(g.sourceHTML);
     }
     if (pass) ok++; else wrong++;
+    words += n;
     rows.push(`
       <div class="verse-input-row is-${status}">
-        <span class="verse-input-row__num"><span class="memo-range__numlabel">${memoVerseLabel(multi, chapter, v)}<span class="memo-range__mark ${pass ? "is-pass" : "is-fail"}" role="img" aria-label="${pass ? "맞음" : "틀림"}"></span></span></span>
+        <span class="verse-input-row__num">${memoNumLabelHTML(memoVerseLabel(multi, chapter, v), pass, n)}</span>
         <div class="verse-input-row__main"><div class="memo-range__result">${body}</div></div>
       </div>`);
   }
-  return { rowsHTML: rows.join(""), ok, wrong, skipped };
-}
-function gradedMemoSummaryHTML(ok, wrong, skipped){
-  return `${ok + wrong}개 절 중 <b>⭕ ${ok}개</b> · <b>❌ ${wrong}개</b>${skipped ? ` · 본문 미등록 ${skipped}개` : ""}`;
+  return { rowsHTML: rows.join(""), ok, wrong, skipped, words };
 }
 
 let memoReviewOpenIdx = -1;
@@ -1612,10 +1621,10 @@ function openMemoReviewDetail(idx){
   document.getElementById("btn-memo-review-back").textContent = "‹ 목록";
   document.getElementById("memo-review-detail-title").textContent = `${REVELATION.book} ${memoRangeLabel(memoPartsOf(t))}`;
 
-  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t);
+  const { rowsHTML, ok, wrong, skipped, words } = renderGradedMemoTest(t);
   memoReviewOpenIdx = idx;
   document.getElementById("memo-review-rows").innerHTML = rowsHTML;
-  document.getElementById("memo-review-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped);
+  document.getElementById("memo-review-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped, words);
   window.scrollTo(0, 0);
   if (memoReviewMode === "mine" && !t.seen) markMemoResultSeen(t, idx);
 }
@@ -1882,6 +1891,7 @@ function diffWords(typed, source){
   const { aKeep, bKeep } = diffChars(tw, sw); // 배열도 그대로 받아 단어끼리 비교
   const tOut = [], sOut = [];
   const red = w => '<span class="is-wrong">' + escapeHtml(w) + "</span>";
+  let wrongWords = 0; // 오답 수 — 같은 자리에서 틀린 단어 묶음마다 내 글·원문 중 많은 쪽 단어 수
   let i = 0, j = 0;
   while (i < tw.length || j < sw.length){
     const ti = i, sj = j;
@@ -1910,27 +1920,29 @@ function diffWords(typed, source){
       }
       tOut.push(...tHead, ...a.map(red), ...tTail);
       sOut.push(...sHead, ...b.map(red), ...sTail);
+      wrongWords += Math.max(a.length, b.length);
     } else {
       tOut.push(...tg.map(red));
       sOut.push(...sg.map(red));
+      wrongWords += Math.max(tg.length, sg.length);
     }
     if (i < tw.length) tOut.push(escapeHtml(tw[i]));
     if (j < sw.length) sOut.push(escapeHtml(sw[j]));
     i++; j++; // 서로 짝이 맞은 단어 하나씩 건너뛴다
   }
-  return { typedHTML: tOut.join(" "), sourceHTML: sOut.join(" ") };
+  return { typedHTML: tOut.join(" "), sourceHTML: sOut.join(" "), wrongWords };
 }
 
 // 외워서 쓴 글(typed)을 원문(sourceText)과 비교한다. 띄어쓰기만 다르면 통과("space"), 글자가 다르면 오답.
-// 반환: { status: "ok"|"space"|"wrong", typedHTML, sourceHTML }
+// 반환: { status: "ok"|"space"|"wrong", typedHTML, sourceHTML, wrongWords(틀린 단어 수) }
 function gradeMemoAnswer(typedText, sourceText){
   const typed = normalizeVerseText(typedText);
   const source = normalizeVerseText(sourceText);
   // 띄어쓰기만 다른 경우(공백을 모두 빼면 같음)는 통과("space")로 본다 — 대신 다른 곳은 주황색으로 짚어준다
   const noSpace = s => s.replace(/\s+/g, "");
   const status = typed === source ? "ok" : noSpace(typed) === noSpace(source) ? "space" : "wrong";
-  const { typedHTML, sourceHTML } = diffWords(typed, source);
-  return { status, typed, typedHTML, sourceHTML };
+  const { typedHTML, sourceHTML, wrongWords } = diffWords(typed, source);
+  return { status, typed, typedHTML, sourceHTML, wrongWords };
 }
 
 function gradeMemoTest(){
@@ -2148,12 +2160,12 @@ async function openAdminMemoPerson(name){
   el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   await Promise.all(memoChaptersOf(mine).map(c => getRevelationChapterText(c).catch(() => [])));
   el.innerHTML = mine.map(t => {
-    const { ok, wrong } = scoreMemoTest(t);
+    const { words } = scoreMemoTest(t);
     return `
       <div class="memo-admin-row" data-at="${escapeHtml(t.at)}">
         <button type="button" class="memo-review-item memo-review-item--mine">
           <span class="memo-review-item__name">${memoRangeLabel(memoPartsOf(t))}<span class="memo-review-item__date">${memoTimeText(t.at)}</span></span>
-          <span class="memo-review-item__score">⭕ ${ok} · ❌ ${wrong}</span>
+          <span class="memo-review-item__score">오답 ${words}개</span>
         </button>
         <button type="button" class="memo-admin-del" aria-label="이 기록 지우기">×</button>
       </div>`;
@@ -2175,9 +2187,9 @@ document.getElementById("memo-admin-list").addEventListener("click", async e => 
 function openAdminMemoDetail(t){
   memoAdminShow("detail");
   document.getElementById("memo-admin-detail-title").textContent = `${REVELATION.book} ${memoRangeLabel(memoPartsOf(t))}`;
-  const { rowsHTML, ok, wrong, skipped } = renderGradedMemoTest(t);
+  const { rowsHTML, ok, wrong, skipped, words } = renderGradedMemoTest(t);
   document.getElementById("memo-admin-rows").innerHTML = rowsHTML;
-  document.getElementById("memo-admin-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped);
+  document.getElementById("memo-admin-summary").innerHTML = gradedMemoSummaryHTML(ok, wrong, skipped, words);
 }
 document.getElementById("btn-memo-admin-back").addEventListener("click", () => {
   if (!document.getElementById("memo-admin-detail").hidden) openAdminMemoPerson(memoAdminName);
