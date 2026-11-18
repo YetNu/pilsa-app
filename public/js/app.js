@@ -2004,6 +2004,16 @@ document.getElementById("memo-test-input").addEventListener("keydown", e => {
   e.preventDefault();
   setTimeout(gradeMemoTest, 0); // 한글 조합 중이던 마지막 글자가 확정된 뒤에 채점
 });
+// 채점 결과를 보는 중에 Enter를 한 번 더 누르면 "다시하기" — 입력칸으로 돌아가 바로 다시 쓸 수 있다
+// (Enter를 꾹 누르고 있을 때 저절로 반복되는 것, 다른 단추·입력칸에 커서가 있을 때, 창이 떠 있을 때는 제외)
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.repeat || e.isComposing || memoMode !== "result") return;
+  if (document.getElementById("memo-verse").hidden) return;
+  if (e.target.closest && e.target.closest("button, input, textarea, select, a")) return;
+  if (document.querySelector(".modal-overlay:not([hidden])")) return;
+  e.preventDefault();
+  setMemoMode("test");
+});
 document.getElementById("memo-verse-check").addEventListener("change", async e => {
   const cb = e.target;
   const open = memoOpen;
