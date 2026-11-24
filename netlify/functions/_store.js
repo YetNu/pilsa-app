@@ -87,12 +87,7 @@ async function getUsers(){
 
 async function addUser(user){
   const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
-    range: "Users!A2:E",
-    valueInputOption: "RAW",
-    requestBody: { values: [[user.name, user.passwordHash, user.nickname || "", user.status, user.role]] },
-  });
+  await appendRows(sheets, "Users", [[user.name, user.passwordHash, user.nickname || "", user.status, user.role]]);
   cacheClear("users");
 }
 
@@ -172,12 +167,7 @@ async function getSubmissions(){
 
 async function addSubmission(sub){
   const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
-    range: "Submissions!A2:C",
-    valueInputOption: "RAW",
-    requestBody: { values: [[sub.name, sub.dayIndex, sub.at]] },
-  });
+  await appendRows(sheets, "Submissions", [[sub.name, sub.dayIndex, sub.at]]);
   cacheClear("submissions");
 }
 
@@ -232,9 +222,7 @@ async function setConfig(patch){
   for (const [key, value] of upserts){
     const idx = rows.findIndex(r => r[0] === key);
     if (idx === -1){
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID, range: "Config!A2:B", valueInputOption: "RAW", requestBody: { values: [[key, value]] },
-      });
+      await appendRows(sheets, "Config", [[key, value]]);
       rows.push([key, value]); // 이번 호출 안에서 다음 upsert가 같은 키를 또 append하지 않도록 로컬 상태도 갱신
     } else {
       const sheetRow = idx + 2; // 1행은 헤더 → 데이터는 2행부터
@@ -339,6 +327,44 @@ async function ensureSheet(sheets, title){
   });
 }
 
+/* ---------- 새 줄 붙이기 ----------
+   예전에는 values.append를 썼는데, 이 기능은 범위 안에서 "표"를 알아서 찾아 그 표의 첫 열부터 이어 쓴다.
+   시트에서 어떤 줄의 앞쪽 칸만 지우는 식으로 손대면 표가 G열 같은 데서 시작하는 걸로 잘못 잡혀서,
+   새 기록이 A열이 아니라 엉뚱한 열에 붙는다. 그러면 저장은 "성공"인데 이름 칸(A열)이 비어 아무 데서도 안 보였다.
+   appendCells는 늘 "데이터가 있는 마지막 줄 다음 줄의 A열"부터 쓰므로 그런 일이 없다. */
+const sheetIds = new Map(); // 탭 이름 → sheetId (컨테이너가 살아 있는 동안 기억)
+async function sheetIdOf(sheets, title, refresh){
+  if (refresh || !sheetIds.has(title)){
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: "sheets.properties(sheetId,title)" });
+    sheetIds.clear();
+    meta.data.sheets.forEach(s => sheetIds.set(s.properties.title, s.properties.sheetId));
+  }
+  return sheetIds.get(title);
+}
+const toCell = v => typeof v === "number" && Number.isFinite(v)
+  ? { userEnteredValue: { numberValue: v } }
+  : { userEnteredValue: { stringValue: v == null ? "" : String(v) } }; // 문자열은 그대로 (=로 시작해도 수식이 되지 않음)
+async function appendRows(sheets, title, rows){
+  let id = await sheetIdOf(sheets, title);
+  if (id === undefined) id = await sheetIdOf(sheets, title, true); // 그사이 누가 탭을 만들었을 수 있다
+  if (id === undefined){
+    if (!MEMO_SHEETS[title]) throw new Error(`시트에 "${title}" 탭이 없어요.`);
+    await ensureSheet(sheets, title);
+    id = await sheetIdOf(sheets, title, true);
+  }
+  const send = sheetId => sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { requests: [{ appendCells: { sheetId, rows: rows.map(r => ({ values: r.map(toCell) })), fields: "userEnteredValue" } }] },
+  });
+  try { await send(id); }
+  catch (err) {
+    // 탭을 지웠다 다시 만들어서 번호가 바뀐 경우 — 번호를 새로 받아 한 번만 더
+    const fresh = await sheetIdOf(sheets, title, true);
+    if (fresh === undefined || fresh === id) throw err;
+    await send(fresh);
+  }
+}
+
 async function readMemoRows(sheets, range){
   try {
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range });
@@ -373,16 +399,7 @@ async function getMemoChecks(){
 
 async function setMemoCheck(name, chapter, verse, done){
   const sheets = await getSheetsClient();
-  const append = () => sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID, range: "Memorize!A2:E", valueInputOption: "RAW",
-    requestBody: { values: [[name, chapter, verse, done ? 1 : 0, new Date().toISOString()]] },
-  });
-  try { await append(); }
-  catch (err) {
-    if (!isMissingSheetError(err)) throw err;
-    await ensureSheet(sheets, "Memorize");
-    await append();
-  }
+  await appendRows(sheets, "Memorize", [[name, chapter, verse, done ? 1 : 0, new Date().toISOString()]]);
   cacheClear("memoChecks");
 }
 
@@ -392,7 +409,13 @@ async function setMemoCheck(name, chapter, verse, done){
 // (sent: 결과를 받은 시각, seen: 본인이 결과를 확인한 시각 — 없으면 "")
 async function getMemoTests(){
   const sheets = await getSheetsClient();
-  const rows = await readMemoRows(sheets, "MemoTests!A2:I");
+  // 예전 방식(values.append)이 A열이 아닌 엉뚱한 열에 붙여 둔 기록도 찾아낸다 — 이름 다음 칸이 제출시각이면 그 자리부터를 한 줄로 본다
+  const isTime = v => /^\d{4}-\d{2}-\d{2}T/.test(String(v || ""));
+  const rows = (await readMemoRows(sheets, "MemoTests!A2:Z")).map(r => {
+    if (r[0]) return r;
+    const c = r.findIndex((v, k) => v && !isTime(v) && isTime(r[k + 1]));
+    return c > 0 ? r.slice(c) : r;
+  });
   return rows.filter(r => r[0]).map(r => {
     let answers = [], parts = null;
     try { answers = JSON.parse(r[5] || "[]"); } catch { /* 깨진 칸은 빈 답으로 */ }
@@ -451,16 +474,12 @@ async function deleteMemoTest(name, at){
 
 async function addMemoTest(test){
   const sheets = await getSheetsClient();
-  const append = () => sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID, range: "MemoTests!A2:I", valueInputOption: "RAW",
-    requestBody: { values: [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), test.sent || "", test.seen || "",
-      test.parts && test.parts.length > 1 ? JSON.stringify(test.parts) : ""]] },
-  });
-  try { await append(); }
-  catch (err) {
-    if (!isMissingSheetError(err)) throw err;
-    await ensureSheet(sheets, "MemoTests");
-    await append();
+  await appendRows(sheets, "MemoTests", [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), test.sent || "", test.seen || "",
+    test.parts && test.parts.length > 1 ? JSON.stringify(test.parts) : ""]]);
+  // 정말 남았는지 다시 읽어 확인한다 — 남지 않았으면 "저장됨"이라고 거짓으로 알리지 않고 오류를 낸다
+  const saved = await readMemoRows(sheets, "MemoTests!A2:B");
+  if (!saved.some(r => r[0] === test.name && r[1] === test.at)){
+    throw new Error("시험 기록이 시트에 저장되지 않았어요. 관리자에게 알려 주세요.");
   }
 }
 
@@ -501,9 +520,7 @@ async function addGachaSet(set){
   const sheets = await getSheetsClient();
   const rows = (await readMemoRows(sheets, "GachaSets!A2:B")).filter(r => r[0]);
   if (!rows.length){ await saveGachaSets([...(await getGachaSets()), set]); return; }
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID, range: "GachaSets!A2:B", valueInputOption: "RAW", requestBody: { values: [[set.id, set.name]] },
-  });
+  await appendRows(sheets, "GachaSets", [[set.id, set.name]]);
 }
 
 // 반환: [{ set, type: "win" | "pen", text }]
@@ -547,9 +564,7 @@ async function setGachaTokens(setId, name, count){
   const rows = await readMemoRows(sheets, "GachaTokens!A2:C");
   const idxs = rows.map((r, i) => r[0] === name && String(r[2] || DEFAULT_GACHA_SET) === setId ? i : -1).filter(i => i >= 0);
   if (!idxs.length){
-    await withSheet(sheets, "GachaTokens", () => sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID, range: "GachaTokens!A2:C", valueInputOption: "RAW", requestBody: { values: [[name, count, setId]] },
-    }));
+    await appendRows(sheets, "GachaTokens", [[name, count, setId]]);
     return;
   }
   // 동시에 들어온 요청 때문에 같은 이름이 두 줄 이상 생겼을 수 있다 — 전부 같은 값으로 맞춘다
@@ -578,10 +593,7 @@ async function deleteGachaSet(setId){
 
 async function addGachaLog(entry){
   const sheets = await getSheetsClient();
-  await withSheet(sheets, "GachaLog", () => sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID, range: "GachaLog!A2:E", valueInputOption: "RAW",
-    requestBody: { values: [[entry.name, entry.at, entry.text, GACHA_TYPE_LABEL[entry.type], entry.setName || ""]] },
-  }));
+  await appendRows(sheets, "GachaLog", [[entry.name, entry.at, entry.text, GACHA_TYPE_LABEL[entry.type], entry.setName || ""]]);
 }
 
 // 반환: [{ name, at, text, type, setName, used }] — 최근 것이 먼저 (used: 사용 처리한 시각, 안 했으면 "")

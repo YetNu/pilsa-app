@@ -926,18 +926,22 @@ async function renderMemo(){
   renderMemoHome();
 }
 
+// 시험 모드면 "암기 시험", 아니면 "암기 테스트"
+function updateMemoTestLabels(){
+  const testName = memoReviewOn() ? "암기 시험" : "암기 테스트";
+  document.getElementById("btn-memo-range-label").textContent = testName;
+  document.getElementById("btn-memo-range").title = testName;
+  document.getElementById("memo-range-title").textContent = testName;
+  document.getElementById("btn-memo-range-start").textContent = memoReviewOn() ? "시험 시작" : "테스트 시작";
+}
+
 /* ---------- 1단계: 주간 박스 + 1~22장 박스 ---------- */
 function renderMemoHome(){
   leaveMemoTestScreen();
   showMemoSection("home");
   // 시험 결과 — 낸 시험이 하나라도 있을 때
   document.getElementById("btn-memo-review").hidden = !(memoData.myTests || []).length;
-  // 시험 모드면 "암기 시험", 아니면 "암기 테스트"
-  const testName = memoReviewOn() ? "암기 시험" : "암기 테스트";
-  document.getElementById("btn-memo-range-label").textContent = testName;
-  document.getElementById("btn-memo-range").title = testName;
-  document.getElementById("memo-range-title").textContent = testName;
-  document.getElementById("btn-memo-range-start").textContent = memoReviewOn() ? "시험 시작" : "테스트 시작";
+  updateMemoTestLabels();
   renderMemoWeekBox();
 
   const mine = memoChecksOf(getCurrentUser().name);
@@ -1144,7 +1148,6 @@ async function startMemoRange(){
   // 전체화면 요청은 버튼을 누른 그 순간(다른 await 전에)에 해야 브라우저가 허락한다
   if (!(await enterMemoTestScreen())) return;
   memoRangeFinished = false;
-  setMemoRangeAction(memoRangeFreshAction());
   const panel = document.getElementById("memo-range-panel");
   const list = document.getElementById("memo-range-list");
   const btn = document.getElementById("btn-memo-range-start");
@@ -1156,9 +1159,19 @@ async function startMemoRange(){
   panel.hidden = false;
   btn.disabled = true;
 
-  try { await Promise.all([...new Set(parts.map(p => p.chapter))].map(getRevelationChapterText)); }
+  // 시험 모드인지 시작할 때마다 서버에 다시 묻는다 — 암기 화면을 열어 둔 뒤에 관리자가 시험 모드를 켜면,
+  // 예전에는 화면에 남아 있던 "꺼짐" 그대로 연습 채점만 하고 기록이 남지 않았다
+  try {
+    const [fresh] = await Promise.all([
+      api("/memorize"),
+      ...[...new Set(parts.map(p => p.chapter))].map(getRevelationChapterText),
+    ]);
+    memoData = fresh;
+  }
   catch (err){ list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; btn.disabled = false; return; }
   finally { btn.disabled = false; }
+  setMemoRangeAction(memoRangeFreshAction());
+  updateMemoTestLabels();
 
   const verses = [];
   for (const p of parts){
