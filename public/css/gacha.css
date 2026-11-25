@@ -315,6 +315,6 @@
 :root[data-theme="dark"] #view-gacha .gacha__mix,
 :root[data-theme="dark"] #view-gacha .gacha__mute{ background: var(--card); }
 :root[data-theme="dark"] #view-gacha .gacha__set-btn.is-active,
-:root[data-theme="dark"] #view-gacha .gacha__mix:hover{ background: rgba(251,146,60,.18); }
-:root[data-theme="dark"] .gacha-chip{ background: rgba(251,146,60,.18); color:#FDBA74; box-shadow: 0 0 0 1.5px rgba(251,146,60,.6); }
-:root[data-theme="dark"] .gacha-token-row.has-tokens{ background: rgba(251,146,60,.14); }
+:root[data-theme="dark"] #view-gacha .gacha__mix:hover{ background: rgba(210,121,58,.18); }
+:root[data-theme="dark"] .gacha-chip{ background: rgba(210,121,58,.18); color:#E3A06B; box-shadow: 0 0 0 1.5px rgba(210,121,58,.6); }
+:root[data-theme="dark"] .gacha-token-row.has-tokens{ background: rgba(210,121,58,.14); }
