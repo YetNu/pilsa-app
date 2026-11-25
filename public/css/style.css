@@ -56,7 +56,8 @@
   --focus:      #D2793A;
   --ink-rgb: 236,236,236; --accent-rgb: 210,121,58; --red-rgb: 219,107,99; --green-rgb: 78,158,110; --shadow-rgb: 0,0,0;
 }
-:root[data-theme="dark"] .memo-done:has(input:checked){ background: rgba(var(--green-rgb),.14); }
+:root[data-theme="dark"] .memo-done:has(input:checked),
+:root[data-theme="dark"] #memo-verse .memo-done:has(input:checked){ background: rgba(var(--green-rgb),.14); } /* 암기 완료 체크 — 밝은 연두 바탕 대신 */
 :root[data-theme="dark"] .memo-verse-item.is-done{ border-color: rgba(var(--green-rgb),.5); background: rgba(var(--green-rgb),.08); }
 /* 목록 맨 아래 다크 모드 단추 — 다른 메뉴와 줄로 나눈다 */
 .topbar__theme{ margin-top:4px; border-top:1px solid var(--rule-soft) !important; border-radius:0 0 10px 10px !important; }
