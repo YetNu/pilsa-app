@@ -308,3 +308,13 @@
 #view-gacha .gacha__head{ align-items:center; }
 #view-gacha .gacha__sets{ flex:1; width:auto; min-width:0; }
 #view-gacha .gacha__set-btn, #view-gacha .gacha__mute{ height:34px; padding:0 12px; display:inline-flex; align-items:center; line-height:1; }
+
+/* 다크 모드: 뽑기 화면의 글자·단추 (기계 자체는 그대로 밝게) */
+:root[data-theme="dark"] #view-gacha .gc-scope{ --gc-fg:#ECECEC; --gc-muted:#A3A3A3; --gc-line:#3A3A3A; --gc-soft:#2A2A2A; }
+:root[data-theme="dark"] #view-gacha .gacha__set-btn,
+:root[data-theme="dark"] #view-gacha .gacha__mix,
+:root[data-theme="dark"] #view-gacha .gacha__mute{ background: var(--card); }
+:root[data-theme="dark"] #view-gacha .gacha__set-btn.is-active,
+:root[data-theme="dark"] #view-gacha .gacha__mix:hover{ background: rgba(251,146,60,.18); }
+:root[data-theme="dark"] .gacha-chip{ background: rgba(251,146,60,.18); color:#FDBA74; box-shadow: 0 0 0 1.5px rgba(251,146,60,.6); }
+:root[data-theme="dark"] .gacha-token-row.has-tokens{ background: rgba(251,146,60,.14); }

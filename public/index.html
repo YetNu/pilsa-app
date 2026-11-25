@@ -7,6 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Gothic+Coding&family=Jua&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css" />
+<script>
+  // 다크 모드: 기본은 지금 디자인(밝은 화면). 목록의 "다크 모드"로 바꾸면 이 기기에 기억해 둔다
+  try { if (localStorage.getItem("pilsa_theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {}
+</script>
 <link rel="stylesheet" href="/css/gacha.css" />
 </head>
 <body>
@@ -24,6 +28,7 @@
         <button class="topbar__btn" id="btn-mypilsa">필사</button>
         <button class="topbar__btn" id="btn-memo">계시록 암기</button>
         <button class="topbar__btn" id="btn-gacha-view">뽑기</button>
+        <button type="button" class="topbar__btn topbar__theme" id="btn-theme" aria-pressed="false">다크 모드</button>
       </nav>
     </div>
     <div class="topbar__title">

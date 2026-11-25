@@ -191,6 +191,20 @@ document.getElementById("btn-mypilsa").addEventListener("click", async () => { i
 document.getElementById("btn-memo").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; memoWeekOffset = 0; showView("view-memo"); });
 document.getElementById("btn-gacha-view").addEventListener("click", async () => { if (!(await confirmLeaveMemoTest())) return; showView("view-gacha"); });
 
+/* ---------- 다크 모드 (목록 맨 아래 단추) — 기본은 밝은 화면, 바꾸면 이 기기에 기억 ---------- */
+const themeBtn = document.getElementById("btn-theme");
+function applyTheme(dark){
+  if (dark) document.documentElement.dataset.theme = "dark"; else delete document.documentElement.dataset.theme;
+  themeBtn.textContent = dark ? "라이트 모드" : "다크 모드";
+  themeBtn.setAttribute("aria-pressed", String(dark));
+}
+applyTheme(document.documentElement.dataset.theme === "dark");
+themeBtn.addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme !== "dark";
+  applyTheme(dark);
+  try { localStorage.setItem("pilsa_theme", dark ? "dark" : "light"); } catch { /* 기억 못 해도 지금 화면은 바뀐다 */ }
+});
+
 /* ---------- 왼쪽 위 목록 단추 ---------- */
 const topMenu = document.getElementById("topbar-menu"), topMenuBtn = document.getElementById("btn-menu");
 function closeTopMenu(){ topMenu.hidden = true; topMenuBtn.setAttribute("aria-expanded", "false"); }
