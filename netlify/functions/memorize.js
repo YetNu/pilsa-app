@@ -14,18 +14,17 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 // POST { action: "submitTest", chapter, from, to, parts?, answers: [{ chapter?, verse, text }] }
 //        (parts: 여러 장에 걸친 시험이면 [{ chapter, from, to }…] — 이때 답안마다 chapter, kind: "exam" | "practice")
 //        → 시험 모드면 암기 시험(exam), 아니면 암기 테스트(practice)로 기록한다 (낸 사람은 바로 결과를 본다)
-//        시험 결과 목록(본인·관리자)은 지금 모드의 기록만 보여준다 — 켜져 있으면 암기 시험, 꺼져 있으면 암기 테스트
+//        본인의 결과 목록은 지금 모드의 기록만 보여준다 (관리자 "암기 결과"는 시험/테스트를 나눠 모두 본다) — 켜져 있으면 암기 시험, 꺼져 있으면 암기 테스트
 // POST { action: "ackResults", ats: [제출시각…] }     → 본인: 받은 결과를 확인함 (기록은 남기고 "확인" 표시만)
-// GET  ?all=1                                        → 관리자: 모든 사람의 시험 기록 (시험 결과 관리)
+// GET  ?all=1                                        → 관리자: 모든 사람의 암기 시험·암기 테스트 기록 (암기 결과 — 기록마다 kind)
 // POST { action: "deleteTest", name, at }            → 관리자: 시험 기록 하나 지우기
 // GET 응답의 myTests: 내 시험 결과 (모두 결과까지)
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "GET" && (event.queryStringParameters || {}).all){
       requireAdmin(event);
-      const [all, users, config] = await Promise.all([store.getMemoTests(), store.getUsers(), store.getConfig()]);
-      const reviewOn = config.memo_review_on === "1";
-      const tests = all.filter(t => t.kind === (reviewOn ? "exam" : "practice"));
+      const [tests, users, config] = await Promise.all([store.getMemoTests(), store.getUsers(), store.getConfig()]);
+      const reviewOn = config.memo_review_on === "1"; // 관리자 화면은 처음에 지금 모드 쪽(시험/테스트)을 보여준다
       const approved = users.filter(u => u.status === "approved").map(u => ({ name: u.name, nickname: u.nickname || "" }));
       return json(200, { tests, users: approved, reviewOn });
     }

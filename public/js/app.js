@@ -2194,35 +2194,62 @@ document.getElementById("memo-strict").addEventListener("change", async e => {
   }
 });
 
-/* ---------- 관리자: 시험 결과 관리 ---------- */
-// 이름 목록 → 그 사람이 "시험 결과"에서 보는 기록들(관리자는 지울 수 있음) → 채점된 결과
-let memoAdminTests = [], memoAdminName = null;
+/* ---------- 관리자: 암기 결과 ---------- */
+// 암기 시험 / 암기 테스트 고르기 → 이름 목록 → 그 사람의 기록들(관리자는 지울 수 있음) → 채점된 결과
+let memoAdminAll = [], memoAdminTests = [], memoAdminName = null, memoAdminKind = null, memoAdminData = null;
 function memoAdminShow(step){ // names | list | detail
   ["names", "list", "detail"].forEach(s => document.getElementById(`memo-admin-${s}`).hidden = s !== step);
   const back = document.getElementById("btn-memo-admin-back");
   back.hidden = step === "names";
   back.textContent = step === "detail" ? "‹ 목록" : "‹ 이름";
+  document.getElementById("memo-admin-kind").hidden = step === "detail";
+}
+const memoKindName = kind => kind === "practice" ? "암기 테스트" : "암기 시험";
+// 고른 종류의 기록만 memoAdminTests에 — 단추에는 종류별 개수
+function applyMemoAdminKind(){
+  memoAdminTests = memoAdminAll.filter(t => t.kind === memoAdminKind);
+  document.querySelectorAll("#memo-admin-kind [data-kind]").forEach(b => {
+    const on = b.dataset.kind === memoAdminKind;
+    b.classList.toggle("is-active", on);
+    b.setAttribute("aria-selected", on);
+    b.innerHTML = `${memoKindName(b.dataset.kind)}<small>${memoAdminAll.filter(t => t.kind === b.dataset.kind).length}</small>`;
+  });
 }
 async function loadAdminMemoTests(){
   memoAdminShow("names");
-  document.getElementById("memo-admin-title").textContent = `${memoResultName(memoData ? memoData.reviewOn : true)} 관리`;
+  document.getElementById("memo-admin-title").textContent = "암기 결과";
   const el = document.getElementById("memo-admin-names");
   el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   let d;
   try { d = await api("/memorize?all=1"); }
   catch (err){ el.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
-  memoAdminTests = d.tests;
-  // 지금 모드의 기록만 온다 — 시험 모드면 암기 시험, 꺼져 있으면 암기 테스트
-  document.getElementById("memo-admin-title").textContent = `${memoResultName(!!d.reviewOn)} 관리`;
+  memoAdminAll = d.tests;
+  memoAdminData = d;
+  if (!memoAdminKind) memoAdminKind = d.reviewOn ? "exam" : "practice"; // 처음에는 지금 모드 쪽
+  renderAdminMemoNames();
+}
+function renderAdminMemoNames(){
+  memoAdminShow("names");
+  document.getElementById("memo-admin-title").textContent = "암기 결과";
+  applyMemoAdminKind();
+  const el = document.getElementById("memo-admin-names");
   const counts = {};
   memoAdminTests.forEach(t => counts[t.name] = (counts[t.name] || 0) + 1);
   // 회원 순서대로, 기록이 있는 사람만 (회원 목록에 없는 이름은 맨 뒤에)
-  const members = (d.users || []).map(u => u.name);
+  const members = ((memoAdminData && memoAdminData.users) || []).map(u => u.name);
   const names = [...members.filter(n => counts[n]), ...Object.keys(counts).filter(n => !members.includes(n))];
   el.innerHTML = names.length
     ? names.map(n => `<button type="button" class="memo-admin-name" data-name="${escapeHtml(n)}">${escapeHtml(n)} <small>${counts[n]}</small></button>`).join("")
-    : `<p class="form-note">아직 ${d.reviewOn ? "암기 시험" : "암기 테스트"} 기록이 없어요.</p>`;
+    : `<p class="form-note">아직 ${memoKindName(memoAdminKind)} 기록이 없어요.</p>`;
 }
+document.getElementById("memo-admin-kind").addEventListener("click", e => {
+  const b = e.target.closest("[data-kind]");
+  if (!b || b.dataset.kind === memoAdminKind) return;
+  memoAdminKind = b.dataset.kind;
+  // 이름 목록이면 그대로, 한 사람의 목록을 보던 중이면 그 사람의 다른 종류 기록으로
+  if (!document.getElementById("memo-admin-list").hidden && memoAdminName){ applyMemoAdminKind(); openAdminMemoPerson(memoAdminName); }
+  else renderAdminMemoNames();
+});
 document.getElementById("memo-admin-names").addEventListener("click", e => {
   const b = e.target.closest(".memo-admin-name");
   if (b) openAdminMemoPerson(b.dataset.name);
@@ -2237,7 +2264,7 @@ async function openAdminMemoPerson(name){
   document.getElementById("memo-admin-title").textContent = name;
   const el = document.getElementById("memo-admin-list");
   const mine = memoAdminTests.filter(t => t.name === name);
-  if (!mine.length){ el.innerHTML = `<p class="form-note">기록이 없어요.</p>`; return; }
+  if (!mine.length){ el.innerHTML = `<p class="form-note">${memoKindName(memoAdminKind)} 기록이 없어요.</p>`; return; }
   el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   await Promise.all(memoChaptersOf(mine).map(c => getRevelationChapterText(c).catch(() => [])));
   el.innerHTML = mine.map(t => {
@@ -2261,7 +2288,8 @@ document.getElementById("memo-admin-list").addEventListener("click", async e => 
   if (!(await showConfirmModal(`${t.name}님의 ${memoRangeLabel(memoPartsOf(t))} 기록을 지울까요?`, "지우기"))) return;
   try {
     await api("/memorize", { method: "POST", body: { action: "deleteTest", name: t.name, at: t.at } });
-    memoAdminTests = memoAdminTests.filter(x => x !== t);
+    memoAdminAll = memoAdminAll.filter(x => x !== t);
+    applyMemoAdminKind();
     openAdminMemoPerson(memoAdminName);
   } catch (err){ showAlertModal(err.message); }
 });
@@ -2274,7 +2302,7 @@ function openAdminMemoDetail(t){
 }
 document.getElementById("btn-memo-admin-back").addEventListener("click", () => {
   if (!document.getElementById("memo-admin-detail").hidden) openAdminMemoPerson(memoAdminName);
-  else loadAdminMemoTests();
+  else renderAdminMemoNames();
 });
 
 /* ===========================================================

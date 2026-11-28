@@ -335,7 +335,7 @@
         <button class="tabs__btn is-active" data-admin-tab="members">전체 회원</button>
         <button class="tabs__btn" data-admin-tab="content">필사 설정</button>
         <button class="tabs__btn" data-admin-tab="memoplan">암기 설정</button>
-        <button class="tabs__btn" data-admin-tab="memotests">시험 결과</button>
+        <button class="tabs__btn" data-admin-tab="memotests">암기 결과</button>
         <button class="tabs__btn" data-admin-tab="gacha">뽑기</button>
       </div>
 
@@ -392,7 +392,7 @@
             <span class="memo-keep-test__switch" aria-hidden="true"></span>
             <span>시험 모드</span>
           </label>
-          <p class="form-note">켜 두면 "암기 테스트"가 "암기 시험"으로 바뀌고, 제출하면 바로 자기 채점 결과를 보면서 그 결과가 "시험 결과"에 기록돼요. 끄면 "암기 테스트"로 채점하고, 그 결과는 "테스트 결과"에 따로 기록돼요. 결과 목록(본인·관리자)에는 지금 모드의 기록만 보여요.</p>
+          <p class="form-note">켜 두면 "암기 테스트"가 "암기 시험"으로 바뀌고, 제출하면 바로 자기 채점 결과를 보면서 그 결과가 "시험 결과"에 기록돼요. 끄면 "암기 테스트"로 채점하고, 그 결과는 "테스트 결과"에 따로 기록돼요. 회원의 결과 목록에는 지금 모드의 기록만 보이고, 관리자는 "암기 결과"에서 시험·테스트를 나눠 모두 볼 수 있어요.</p>
           <p class="form-note" id="memo-review-status"></p>
         </div>
 
@@ -410,11 +410,15 @@
         </section>
       </div>
 
-      <!-- 시험 결과 관리: 이름 → 그 사람의 시험 결과 목록(지우기) → 채점된 결과 보기 -->
+      <!-- 암기 결과: 시험/테스트 고르기 → 이름 → 그 사람의 기록 목록(지우기) → 채점된 결과 보기 -->
       <div class="admin-panel" id="admin-memotests" hidden>
         <div class="memo-admin__head">
           <button type="button" class="btn btn--ghost btn-back" id="btn-memo-admin-back" hidden>‹ 이름</button>
-          <h4 id="memo-admin-title">시험 결과 관리</h4>
+          <h4 id="memo-admin-title">암기 결과</h4>
+        </div>
+        <div class="memo-admin-kind" id="memo-admin-kind" role="tablist">
+          <button type="button" role="tab" data-kind="exam">암기 시험</button>
+          <button type="button" role="tab" data-kind="practice">암기 테스트</button>
         </div>
         <div class="memo-admin-names" id="memo-admin-names"></div>
         <div id="memo-admin-list" hidden></div>
