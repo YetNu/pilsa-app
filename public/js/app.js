@@ -958,8 +958,8 @@ function memoResultName(on = memoReviewOn()){ return on ? "시험 결과" : "테
 function renderMemoHome(){
   leaveMemoTestScreen();
   showMemoSection("home");
-  // 시험 결과 — 낸 시험이 하나라도 있을 때
-  document.getElementById("btn-memo-review").hidden = !(memoData.myTests || []).length;
+  // 결과 단추 — 테스트 결과(시험 모드 꺼짐)는 기록이 없어도 늘 보이고, 시험 결과는 낸 시험이 하나라도 있을 때
+  document.getElementById("btn-memo-review").hidden = memoReviewOn() && !(memoData.myTests || []).length;
   updateMemoTestLabels();
   renderMemoWeekBox();
 
@@ -1592,7 +1592,7 @@ async function openMemoReview(){
     memoReviewTests = (memoData = await api("/memorize")).myTests || [];
   } catch (err){ list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
   document.getElementById("memo-review-title").textContent = memoResultName(); // 그사이 모드가 바뀌었을 수 있다
-  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : "아직 기록이 없어요."}</p>`; return; }
+  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : `아직 ${memoReviewOn() ? "암기 시험" : "암기 테스트"} 기록이 없어요.`}</p>`; return; }
 
   // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
   await Promise.all(memoChaptersOf(memoReviewTests).map(c => getRevelationChapterText(c).catch(() => [])));
