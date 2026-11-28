@@ -18,7 +18,7 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 // POST { action: "ackResults", ats: [제출시각…] }     → 본인: 받은 결과를 확인함 (기록은 남기고 "확인" 표시만)
 // GET  ?all=1                                        → 관리자: 모든 사람의 암기 시험·암기 테스트 기록 (암기 결과 — 기록마다 kind)
 // POST { action: "deleteTest", name, at, kind }      → 관리자: 기록 하나 지우기 (kind: "exam" 암기시험 탭 | "practice" 암기테스트 탭)
-// GET 응답의 myTests: 내 시험 결과 (모두 결과까지)
+// GET 응답의 myTests: 내 암기 시험·암기 테스트 기록 모두 (기록마다 kind — 화면에서 시험/테스트를 골라 본다)
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "GET" && (event.queryStringParameters || {}).all){
@@ -37,10 +37,10 @@ exports.handler = async (event) => {
         store.getConfig(),
         store.getMemoTests(),
       ]);
-      // 내 결과 — 시험 모드면 암기 시험 기록만, 아니면 암기 테스트 기록만 (내자마자 결과를 보므로 모두 그대로 내려준다)
+      // 내 결과 — 암기 시험·암기 테스트 모두 (내자마자 결과를 보므로 그대로 내려준다). 처음에는 지금 모드 쪽을 보여준다
       const reviewOn = config.memo_review_on === "1";
-      const myTests = tests.filter(t => t.name === me.name && t.kind === (reviewOn ? "exam" : "practice"))
-        .map(({ at, chapter, from, to, parts, answers, seen }) => ({ at, chapter, from, to, parts, answers, seen: seen || at }));
+      const myTests = tests.filter(t => t.name === me.name)
+        .map(({ at, chapter, from, to, parts, answers, seen, kind }) => ({ at, chapter, from, to, parts, answers, seen: seen || at, kind }));
       const approvedUsers = users
         .filter(u => u.status === "approved")
         .map(u => ({ name: u.name, nickname: u.nickname || "" }));

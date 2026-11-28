@@ -729,12 +729,12 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
 /* 관리자: 시험 결과 관리 */
 .memo-admin__head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
 .memo-admin__head h4{ margin:0; font-size:1.05rem; }
-/* 암기 결과: 암기 시험 / 암기 테스트 고르기 */
-.memo-admin-kind{ display:inline-grid; grid-template-columns:1fr 1fr; gap:4px; padding:3px; border-radius:12px; background: var(--paper); margin-bottom:14px; }
-.memo-admin-kind[hidden]{ display:none; }
-.memo-admin-kind button{ border:0; border-radius:9px; padding:6px 16px; background:transparent; cursor:pointer; font: inherit; font-weight:600; font-size:.9rem; color: var(--ink-soft); }
-.memo-admin-kind button.is-active{ background: var(--card); color: var(--ink); box-shadow: var(--btn-shadow); }
-.memo-admin-kind small{ margin-left:4px; font-weight:400; color: var(--ink-soft); }
+/* 암기 시험 / 암기 테스트 고르기 (내 결과, 관리자 암기 결과) */
+.memo-kind-toggle{ display:inline-grid; grid-template-columns:1fr 1fr; gap:4px; padding:3px; border-radius:12px; background: var(--paper); margin-bottom:14px; }
+.memo-kind-toggle[hidden]{ display:none; }
+.memo-kind-toggle button{ border:0; border-radius:9px; padding:6px 16px; background:transparent; cursor:pointer; font: inherit; font-weight:600; font-size:.9rem; color: var(--ink-soft); }
+.memo-kind-toggle button.is-active{ background: var(--card); color: var(--ink); box-shadow: var(--btn-shadow); }
+.memo-kind-toggle small{ margin-left:4px; font-weight:400; color: var(--ink-soft); }
 .memo-admin-names{ display:flex; flex-wrap:wrap; gap:8px; }
 .memo-admin-name{ border:0; border-radius:999px; padding:9px 16px; background: var(--card); box-shadow: var(--btn-shadow); cursor:pointer; font: inherit; font-weight:600; color: var(--ink); }
 .memo-admin-name small{ margin-left:4px; font-weight:400; color: var(--ink-soft); }

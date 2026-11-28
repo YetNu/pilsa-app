@@ -958,7 +958,7 @@ function memoResultName(on = memoReviewOn()){ return on ? "시험 결과" : "테
 function renderMemoHome(){
   leaveMemoTestScreen();
   showMemoSection("home");
-  // 결과 단추 — 테스트 결과(시험 모드 꺼짐)는 기록이 없어도 늘 보이고, 시험 결과는 낸 시험이 하나라도 있을 때
+  // 결과 단추 — 테스트 결과(시험 모드 꺼짐)는 기록이 없어도 늘 보이고, 시험 결과는 시험·테스트 기록이 하나라도 있을 때
   document.getElementById("btn-memo-review").hidden = memoReviewOn() && !(memoData.myTests || []).length;
   updateMemoTestLabels();
   renderMemoWeekBox();
@@ -1576,26 +1576,52 @@ document.getElementById("btn-close-done").addEventListener("click", closeDoneMod
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDoneModal(); });
 
 /* ---------- 시험 결과 (내 시험) ---------- */
-let memoReviewTests = [];
+let memoReviewTests = [], memoReviewAll = [], memoReviewKind = "exam";
 let memoReviewMode = "mine"; // 내 시험 결과 (예전에는 채점자가 모든 사람 것을 보는 "all"도 있었다)
-async function openMemoReview(){
+// 홈에서 들어오면 지금 모드 쪽(시험 결과/테스트 결과)부터, 새로고침은 보던 쪽 그대로
+async function openMemoReview(e){
+  const fromHome = !(e && e.currentTarget && e.currentTarget.id === "btn-memo-review-refresh");
   memoReviewMode = "mine";
+  document.getElementById("memo-review-kind").hidden = false;
   showMemoSection("review");
   document.getElementById("memo-review-detail").hidden = true;
   document.getElementById("btn-memo-review-refresh").hidden = false;
   document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
-  document.getElementById("memo-review-title").textContent = memoResultName();
+  if (fromHome) memoReviewKind = memoReviewOn() ? "exam" : "practice";
+  setMemoReviewKindUI();
   const list = document.getElementById("memo-review-list");
   list.hidden = false;
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   try {
-    memoReviewTests = (memoData = await api("/memorize")).myTests || [];
+    memoReviewAll = (memoData = await api("/memorize")).myTests || [];
   } catch (err){ list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
-  document.getElementById("memo-review-title").textContent = memoResultName(); // 그사이 모드가 바뀌었을 수 있다
-  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : `아직 ${memoReviewOn() ? "암기 시험" : "암기 테스트"} 기록이 없어요.`}</p>`; return; }
+  if (fromHome) memoReviewKind = memoReviewOn() ? "exam" : "practice"; // 그사이 모드가 바뀌었을 수 있다
+  renderMemoReviewList();
+}
+function setMemoReviewKindUI(){
+  document.getElementById("memo-review-title").textContent = memoResultName(memoReviewKind === "exam");
+  document.querySelectorAll("#memo-review-kind [data-kind]").forEach(b => {
+    const on = b.dataset.kind === memoReviewKind;
+    b.classList.toggle("is-active", on);
+    b.setAttribute("aria-selected", on);
+  });
+}
+document.getElementById("memo-review-kind").addEventListener("click", e => {
+  const b = e.target.closest("[data-kind]");
+  if (!b || b.dataset.kind === memoReviewKind) return;
+  memoReviewKind = b.dataset.kind;
+  renderMemoReviewList();
+});
+async function renderMemoReviewList(){
+  setMemoReviewKindUI();
+  const list = document.getElementById("memo-review-list");
+  const kind = memoReviewKind;
+  memoReviewTests = memoReviewAll.filter(t => t.kind === kind);
+  if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">아직 ${memoKindName(kind)} 기록이 없어요.</p>`; return; }
 
   // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
   await Promise.all(memoChaptersOf(memoReviewTests).map(c => getRevelationChapterText(c).catch(() => [])));
+  if (kind !== memoReviewKind) return; // 불러오는 사이에 다른 쪽을 골랐다
   const nameOf = n => { const u = (memoData.users || []).find(x => x.name === n); return u && u.nickname ? `${n} · ${u.nickname}` : n; };
 
   list.innerHTML = memoReviewTests.map((t, i) => {
@@ -1686,7 +1712,8 @@ function openMemoReviewDetail(idx){
   document.getElementById("memo-review-list").hidden = true;
   document.getElementById("memo-review-detail").hidden = false;
   document.getElementById("btn-memo-review-refresh").hidden = true;
-  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? t.name : memoResultName();
+  document.getElementById("memo-review-kind").hidden = true;
+  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? t.name : memoResultName(memoReviewKind === "exam");
   document.getElementById("btn-memo-review-back").textContent = "‹ 목록";
   document.getElementById("memo-review-detail-title").textContent = `${REVELATION.book} ${memoRangeLabel(memoPartsOf(t))}`;
 
@@ -1714,7 +1741,8 @@ document.getElementById("btn-memo-review-back").addEventListener("click", () => 
   if (!document.getElementById("memo-review-detail").hidden){
     document.getElementById("memo-review-detail").hidden = true;
     document.getElementById("memo-review-list").hidden = false;
-    document.getElementById("memo-review-title").textContent = memoResultName();
+    document.getElementById("memo-review-title").textContent = memoResultName(memoReviewKind === "exam");
+    document.getElementById("memo-review-kind").hidden = false;
     document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
     return;
   }

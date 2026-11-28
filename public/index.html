@@ -259,13 +259,17 @@
 
       </div>
 
-      <!-- 시험 결과(나): 범위 암기 시험 기록을 채점된 모습으로 -->
+      <!-- 내 결과: 암기 시험 / 암기 테스트를 골라 채점된 모습으로 (처음에는 지금 모드 쪽) -->
       <div id="memo-review" hidden>
         <div class="memo-head">
           <button class="btn btn--ghost btn-back" id="btn-memo-review-back">‹ 전체 장</button>
           <h3 id="memo-review-title">시험 결과</h3>
           <!-- 새로 들어온 기록을 다시 불러온다 (목록에서만 보임) -->
           <button type="button" class="memo-review-refresh" id="btn-memo-review-refresh" aria-label="새로고침" title="새로고침">↻</button>
+        </div>
+        <div class="memo-kind-toggle" id="memo-review-kind" role="tablist">
+          <button type="button" role="tab" data-kind="exam">시험 결과</button>
+          <button type="button" role="tab" data-kind="practice">테스트 결과</button>
         </div>
         <div id="memo-review-list"></div>
         <div class="pilsa-panel" id="memo-review-detail" hidden>
@@ -416,7 +420,7 @@
           <button type="button" class="btn btn--ghost btn-back" id="btn-memo-admin-back" hidden>‹ 이름</button>
           <h4 id="memo-admin-title">암기 결과</h4>
         </div>
-        <div class="memo-admin-kind" id="memo-admin-kind" role="tablist">
+        <div class="memo-kind-toggle" id="memo-admin-kind" role="tablist">
           <button type="button" role="tab" data-kind="exam">암기 시험</button>
           <button type="button" role="tab" data-kind="practice">암기 테스트</button>
         </div>
