@@ -947,7 +947,12 @@ function updateMemoTestLabels(){
   document.getElementById("btn-memo-range").title = testName;
   document.getElementById("memo-range-title").textContent = testName;
   document.getElementById("btn-memo-range-start").textContent = memoReviewOn() ? "시험 시작" : "테스트 시작";
+  const resultName = memoResultName();
+  document.getElementById("btn-memo-review-label").textContent = resultName;
+  document.getElementById("btn-memo-review").title = resultName;
 }
+// 결과 목록 이름 — 시험 모드면 암기 시험 기록("시험 결과"), 아니면 암기 테스트 기록("테스트 결과")만 보여준다
+function memoResultName(on = memoReviewOn()){ return on ? "시험 결과" : "테스트 결과"; }
 
 /* ---------- 1단계: 주간 박스 + 1~22장 박스 ---------- */
 function renderMemoHome(){
@@ -1524,23 +1529,37 @@ document.getElementById("btn-memo-range-grade").addEventListener("click", async 
     if (await showConfirmModal("정말 제출할까요?", "제출")) submitMemoRange();
     return;
   }
-  if (await showConfirmModal("정말 채점할까요?", "채점")) gradeMemoRange();
+  if (await showConfirmModal("정말 채점할까요?", "채점")) practiceMemoRange();
 });
 
-// 시험 모드: 쓴 답을 "시험 결과"에 기록하고, 그 자리에서 바로 채점 결과를 보여준다
-async function submitMemoRange(){
-  if (!memoRange) return;
-  const btn = document.getElementById("btn-memo-range-grade");
+// 쓴 답을 서버에 기록 — kind: "exam"(암기 시험 → 시험 결과) | "practice"(암기 테스트 → 테스트 결과)
+function memoRangeRecordBody(kind){
   const inputs = [...document.querySelectorAll("#memo-range-list .memo-range__input")];
   const multi = memoRange.parts.length > 1;
   const answers = memoRange.verses
     .map((v, i) => ({ ...(multi ? { chapter: v.chapter } : {}), verse: v.verse, text: v.text === null ? null : inputs[i].value }))
     .filter(a => a.text !== null);
   const first = memoRange.parts[0];
+  return { action: "submitTest", kind, chapter: first.chapter, from: first.from, to: first.to, ...(multi ? { parts: memoRange.parts } : {}), answers };
+}
+
+// 시험 모드가 꺼져 있을 때: 바로 채점해 보여주고, 그 결과를 "테스트 결과"에 기록한다
+async function practiceMemoRange(){
+  if (!memoRange) return;
+  const body = memoRangeRecordBody("practice"); // 채점하면 입력칸이 감춰지므로 먼저 답을 모은다
+  gradeMemoRange();
+  try { await api("/memorize", { method: "POST", body }); }
+  catch (err) { showAlertModal(`채점은 했지만 기록을 남기지 못했어요.\n${err.message}`); return; }
+  memoData.myTests = [{}, ...(memoData.myTests || [])]; // 홈의 "테스트 결과" 단추가 바로 보이게
+}
+
+// 시험 모드: 쓴 답을 "시험 결과"에 기록하고, 그 자리에서 바로 채점 결과를 보여준다
+async function submitMemoRange(){
+  if (!memoRange) return;
+  const btn = document.getElementById("btn-memo-range-grade");
   btn.disabled = true;
   try {
-    await api("/memorize", { method: "POST", body: { action: "submitTest", chapter: first.chapter, from: first.from, to: first.to,
-      ...(multi ? { parts: memoRange.parts } : {}), answers } });
+    await api("/memorize", { method: "POST", body: memoRangeRecordBody("exam") });
   } catch (err) {
     showAlertModal(err.message);
     btn.disabled = false;
@@ -1565,13 +1584,14 @@ async function openMemoReview(){
   document.getElementById("memo-review-detail").hidden = true;
   document.getElementById("btn-memo-review-refresh").hidden = false;
   document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
-  document.getElementById("memo-review-title").textContent = "시험 결과";
+  document.getElementById("memo-review-title").textContent = memoResultName();
   const list = document.getElementById("memo-review-list");
   list.hidden = false;
   list.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   try {
     memoReviewTests = (memoData = await api("/memorize")).myTests || [];
   } catch (err){ list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
+  document.getElementById("memo-review-title").textContent = memoResultName(); // 그사이 모드가 바뀌었을 수 있다
   if (!memoReviewTests.length){ list.innerHTML = `<p class="form-note">${memoReviewMode === "all" ? "채점할 시험이 없어요." : "아직 기록이 없어요."}</p>`; return; }
 
   // 목록에 맞은/틀린 개수까지 보여주려면 본문이 필요하다 — 나오는 장들을 한 번씩만 불러온다
@@ -1666,7 +1686,7 @@ function openMemoReviewDetail(idx){
   document.getElementById("memo-review-list").hidden = true;
   document.getElementById("memo-review-detail").hidden = false;
   document.getElementById("btn-memo-review-refresh").hidden = true;
-  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? t.name : "시험 결과";
+  document.getElementById("memo-review-title").textContent = memoReviewMode === "all" ? t.name : memoResultName();
   document.getElementById("btn-memo-review-back").textContent = "‹ 목록";
   document.getElementById("memo-review-detail-title").textContent = `${REVELATION.book} ${memoRangeLabel(memoPartsOf(t))}`;
 
@@ -1694,7 +1714,7 @@ document.getElementById("btn-memo-review-back").addEventListener("click", () => 
   if (!document.getElementById("memo-review-detail").hidden){
     document.getElementById("memo-review-detail").hidden = true;
     document.getElementById("memo-review-list").hidden = false;
-    document.getElementById("memo-review-title").textContent = "시험 결과";
+    document.getElementById("memo-review-title").textContent = memoResultName();
     document.getElementById("btn-memo-review-back").textContent = "‹ 전체 장";
     return;
   }
@@ -2146,7 +2166,7 @@ async function saveMemoReviewSetting(){
   try {
     await api("/memorize", { method: "POST", body: { action: "setReview", on } });
     if (memoData) memoData.reviewOn = on;
-    statusEl.textContent = on ? "켰어요. 이제 \"암기 시험\"으로 치고, 제출하면 바로 결과를 보면서 기록돼요." : "껐어요. 기록 없이 연습으로 채점만 해요.";
+    statusEl.textContent = on ? "켰어요. 이제 \"암기 시험\"으로 치고, 제출하면 바로 결과를 보면서 \"시험 결과\"에 기록돼요." : "껐어요. 이제 \"암기 테스트\"로 치고, 채점하면 \"테스트 결과\"에 따로 기록돼요.";
   } catch (err) {
     statusEl.textContent = err.message;
     loadAdminMemoPlan();
@@ -2185,13 +2205,15 @@ function memoAdminShow(step){ // names | list | detail
 }
 async function loadAdminMemoTests(){
   memoAdminShow("names");
-  document.getElementById("memo-admin-title").textContent = "시험 결과 관리";
+  document.getElementById("memo-admin-title").textContent = `${memoResultName(memoData ? memoData.reviewOn : true)} 관리`;
   const el = document.getElementById("memo-admin-names");
   el.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   let d;
   try { d = await api("/memorize?all=1"); }
   catch (err){ el.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`; return; }
   memoAdminTests = d.tests;
+  // 지금 모드의 기록만 온다 — 시험 모드면 암기 시험, 꺼져 있으면 암기 테스트
+  document.getElementById("memo-admin-title").textContent = `${memoResultName(!!d.reviewOn)} 관리`;
   const counts = {};
   memoAdminTests.forEach(t => counts[t.name] = (counts[t.name] || 0) + 1);
   // 회원 순서대로, 기록이 있는 사람만 (회원 목록에 없는 이름은 맨 뒤에)
@@ -2199,7 +2221,7 @@ async function loadAdminMemoTests(){
   const names = [...members.filter(n => counts[n]), ...Object.keys(counts).filter(n => !members.includes(n))];
   el.innerHTML = names.length
     ? names.map(n => `<button type="button" class="memo-admin-name" data-name="${escapeHtml(n)}">${escapeHtml(n)} <small>${counts[n]}</small></button>`).join("")
-    : `<p class="form-note">아직 시험 기록이 없어요.</p>`;
+    : `<p class="form-note">아직 ${d.reviewOn ? "암기 시험" : "암기 테스트"} 기록이 없어요.</p>`;
 }
 document.getElementById("memo-admin-names").addEventListener("click", e => {
   const b = e.target.closest(".memo-admin-name");

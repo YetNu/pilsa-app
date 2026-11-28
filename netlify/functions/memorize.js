@@ -12,7 +12,9 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 //        (전체화면 필수 · 다른 화면에 다녀오면 답 지우기 · 분할 화면 막기)
 // POST { action: "setReview", on }                   → 관리자 전용, 시험 모드 켜기/끄기
 // POST { action: "submitTest", chapter, from, to, parts?, answers: [{ chapter?, verse, text }] }
-//        (parts: 여러 장에 걸친 시험이면 [{ chapter, from, to }…] — 이때 답안마다 chapter) → 시험 모드일 때 시험 제출 (시험 결과에 남고, 낸 사람은 바로 결과를 본다)
+//        (parts: 여러 장에 걸친 시험이면 [{ chapter, from, to }…] — 이때 답안마다 chapter, kind: "exam" | "practice")
+//        → 시험 모드면 암기 시험(exam), 아니면 암기 테스트(practice)로 기록한다 (낸 사람은 바로 결과를 본다)
+//        시험 결과 목록(본인·관리자)은 지금 모드의 기록만 보여준다 — 켜져 있으면 암기 시험, 꺼져 있으면 암기 테스트
 // POST { action: "ackResults", ats: [제출시각…] }     → 본인: 받은 결과를 확인함 (기록은 남기고 "확인" 표시만)
 // GET  ?all=1                                        → 관리자: 모든 사람의 시험 기록 (시험 결과 관리)
 // POST { action: "deleteTest", name, at }            → 관리자: 시험 기록 하나 지우기
@@ -21,9 +23,11 @@ exports.handler = async (event) => {
   try {
     if (event.httpMethod === "GET" && (event.queryStringParameters || {}).all){
       requireAdmin(event);
-      const [tests, users] = await Promise.all([store.getMemoTests(), store.getUsers()]);
+      const [all, users, config] = await Promise.all([store.getMemoTests(), store.getUsers(), store.getConfig()]);
+      const reviewOn = config.memo_review_on === "1";
+      const tests = all.filter(t => t.kind === (reviewOn ? "exam" : "practice"));
       const approved = users.filter(u => u.status === "approved").map(u => ({ name: u.name, nickname: u.nickname || "" }));
-      return json(200, { tests, users: approved });
+      return json(200, { tests, users: approved, reviewOn });
     }
 
     if (event.httpMethod === "GET"){
@@ -34,8 +38,9 @@ exports.handler = async (event) => {
         store.getConfig(),
         store.getMemoTests(),
       ]);
-      // 내 시험 결과 — 시험 모드에서는 내자마자 결과를 보므로 모두 그대로 내려준다
-      const myTests = tests.filter(t => t.name === me.name)
+      // 내 결과 — 시험 모드면 암기 시험 기록만, 아니면 암기 테스트 기록만 (내자마자 결과를 보므로 모두 그대로 내려준다)
+      const reviewOn = config.memo_review_on === "1";
+      const myTests = tests.filter(t => t.name === me.name && t.kind === (reviewOn ? "exam" : "practice"))
         .map(({ at, chapter, from, to, parts, answers, seen }) => ({ at, chapter, from, to, parts, answers, seen: seen || at }));
       const approvedUsers = users
         .filter(u => u.status === "approved")
@@ -46,7 +51,7 @@ exports.handler = async (event) => {
         startChapter: Number(config.memo_start_chapter) || MEMO_DEFAULT_START_CHAPTER,
         strict: config.memo_strict !== "0",
         // 시험 모드 (Config의 memo_review_on을 그대로 쓴다 — 예전 "채점자에게 보내기" 스위치 자리)
-        reviewOn: config.memo_review_on === "1",
+        reviewOn,
         myTests,
         totalVerses: REVELATION_TOTAL_VERSES,
         memoOverrides: config.memo_overrides || {},
@@ -55,7 +60,7 @@ exports.handler = async (event) => {
 
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    const { action, chapter, verse, done, startDate, startChapter, strict, on, from, to, answers, parts, name, at, ats, date, count } = JSON.parse(event.body || "{}");
+    const { action, chapter, verse, done, startDate, startChapter, strict, on, from, to, answers, parts, name, at, ats, date, count, kind } = JSON.parse(event.body || "{}");
 
     if (action === "check"){
       const user = requireUser(event);
@@ -114,7 +119,11 @@ exports.handler = async (event) => {
     if (action === "submitTest"){
       const user = requireUser(event);
       const config = await store.getConfig();
-      if (config.memo_review_on !== "1") return json(400, { error: "지금은 시험 모드가 아니에요. 새로고침 후 다시 해주세요." });
+      const reviewOn = config.memo_review_on === "1";
+      // 화면이 알던 모드와 지금 모드가 다르면 (그사이 관리자가 바꿈) 엉뚱한 쪽에 기록하지 않는다
+      const want = kind === "practice" ? "practice" : "exam";
+      if (want === "exam" && !reviewOn) return json(400, { error: "지금은 시험 모드가 아니에요. 새로고침 후 다시 해주세요." });
+      if (want === "practice" && reviewOn) return json(400, { error: "지금은 시험 모드예요. 새로고침 후 다시 해주세요." });
       // 범위 목록 — 예전처럼 한 장이면 chapter/from/to 하나
       const ranges = Array.isArray(parts) && parts.length ? parts : [{ chapter, from, to }];
       const validRange = p => p && Number.isInteger(p.chapter) && Number.isInteger(p.from) && Number.isInteger(p.to) && p.from <= p.to
@@ -131,7 +140,7 @@ exports.handler = async (event) => {
                         : { verse: a.verse, text: String(a.text || "").slice(0, 2000) });
       // 낸 사람이 바로 결과를 보므로 보냄·확인도 같은 시각으로 채운다
       const at = new Date().toISOString();
-      await store.addMemoTest({ name: user.name, at, sent: at, seen: at, ...clean[0], parts: multi ? clean : null, answers: cleanAnswers });
+      await store.addMemoTest({ name: user.name, at, sent: at, seen: at, ...clean[0], parts: multi ? clean : null, answers: cleanAnswers, kind: want });
       return json(200, { ok: true });
     }
 
