@@ -54,6 +54,7 @@ let openAssignment = null;   // 현재 펼쳐진 (날짜, 배정쌍)
 /* ---------- 화면 전환 ---------- */
 const views = ["view-auth", "view-status", "view-mypilsa", "view-memo", "view-gacha", "view-admin"];
 function showView(id){
+  MemoAudio.stopAll(); // 다른 화면으로 가면 듣던 음성은 멈춘다
   // 뽑기 화면에 새로 들어올 때는 setGachaViewActive가 남은 기회를 직접 확인한다 (아래에서 한 번 더 부르지 않게)
   const enteringGacha = id === "view-gacha" && document.getElementById("view-gacha").hidden;
   views.forEach(v => document.getElementById(v).hidden = (v !== id));
@@ -928,6 +929,7 @@ function memoDayLabelHTML(slot){
 }
 
 function showMemoSection(name){
+  MemoAudio.stopAll();
   ["home", "chapter", "verse", "range", "review"].forEach(s => document.getElementById(`memo-${s}`).hidden = s !== name);
 }
 
@@ -1071,17 +1073,28 @@ document.getElementById("btn-memo-range-add").addEventListener("click", () => {
 });
 
 /* ----- 장·절 상자 창 ----- */
-const memoPick = { i: 0, chapter: 0, start: 0 };
+// listen: 장 전체 듣기 범위를 고를 때 { range(지금 범위|null), done(from, to) } — 장은 정해져 있어서 절만 고른다
+const memoPick = { i: 0, chapter: 0, start: 0, listen: null };
 const memoPickModal = document.getElementById("memo-pick-modal");
 function openMemoPick(i){
+  memoPick.listen = null;
   memoPick.i = i;
   memoPick.chapter = memoRangeParts[i].chapter || 0;
   memoPick.start = 0;
   memoPickModal.hidden = false;
   renderMemoPick();
 }
+// 장 전체 듣기 범위 — 시험 범위와 같은 절 상자 (시작 절 → 끝 절)
+function openMemoListenPick(chapter, range, done){
+  memoPick.listen = { range, done };
+  memoPick.chapter = chapter;
+  memoPick.start = 0;
+  memoPickModal.hidden = false;
+  renderMemoPick();
+}
 function closeMemoPick(){
   memoPickModal.hidden = true;
+  if (memoPick.listen){ memoPick.listen = null; return; }
   // ＋로 붙였다가 아무것도 고르지 않고 닫은 줄은 뺀다
   const p = memoRangeParts[memoPick.i];
   if (memoPick.i > 0 && p && !p.from){ memoRangeParts.splice(memoPick.i, 1); renderMemoRangeParts(); }
@@ -1089,7 +1102,7 @@ function closeMemoPick(){
 function renderMemoPick(){
   const grid = document.getElementById("memo-pick-grid");
   const title = document.getElementById("memo-pick-title"), hint = document.getElementById("memo-pick-hint");
-  document.getElementById("btn-memo-pick-back").hidden = !memoPick.chapter;
+  document.getElementById("btn-memo-pick-back").hidden = !memoPick.chapter || !!memoPick.listen;
   if (!memoPick.chapter){
     title.textContent = "요한계시록";
     hint.textContent = "장을 고르세요";
@@ -1102,7 +1115,7 @@ function renderMemoPick(){
   const count = REVELATION.verses[memoPick.chapter - 1];
   title.textContent = `요한계시록 ${memoPick.chapter}장`;
   hint.innerHTML = memoPick.start ? `<b>${memoPick.start}절</b>부터 — 끝 절을 누르세요` : "시작 절을 누르세요";
-  const cur = memoRangeParts[memoPick.i];
+  const cur = memoPick.listen ? { chapter: memoPick.chapter, ...(memoPick.listen.range || {}) } : memoRangeParts[memoPick.i];
   const keep = !memoPick.start && cur.chapter === memoPick.chapter && cur.from; // 전에 고른 범위를 옅게 보여준다
   grid.innerHTML = Array.from({ length: count }, (_, k) => {
     const v = k + 1;
@@ -1117,18 +1130,25 @@ document.getElementById("memo-pick-grid").addEventListener("click", e => {
   if (!memoPick.start){ memoPick.start = v; renderMemoPick(); return; }
   // 두 번째로 누른 절이 끝 — 앞쪽을 눌렀으면 서로 바꾼다
   const from = Math.min(memoPick.start, v), to = Math.max(memoPick.start, v);
-  Object.assign(memoRangeParts[memoPick.i], { chapter: memoPick.chapter, from, to });
+  const listen = memoPick.listen;
+  if (!listen) Object.assign(memoRangeParts[memoPick.i], { chapter: memoPick.chapter, from, to });
   // 고른 범위를 잠깐 칠해 보여주고 닫는다
   document.querySelectorAll("#memo-pick-grid .memo-pick__cell").forEach(b => {
     const n = Number(b.dataset.verse); b.classList.toggle("is-in", n >= from && n <= to);
   });
+  if (listen){
+    memoPick.listen = null;
+    setTimeout(() => { memoPickModal.hidden = true; listen.done(from, to); }, 220);
+    return;
+  }
   renderMemoRangeParts();
   setTimeout(() => { memoPickModal.hidden = true; }, 220);
 });
 document.getElementById("btn-memo-pick-back").addEventListener("click", () => { memoPick.chapter = 0; memoPick.start = 0; renderMemoPick(); });
 document.getElementById("btn-memo-pick-close").addEventListener("click", closeMemoPick);
 memoPickModal.addEventListener("click", e => { if (e.target === memoPickModal) closeMemoPick(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !memoPickModal.hidden) closeMemoPick(); });
+// Esc 는 절 상자만 닫는다 (듣기 범위를 고르던 중이면 뒤의 장 전체 창까지 닫히지 않게)
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !memoPickModal.hidden){ e.stopImmediatePropagation(); closeMemoPick(); } });
 
 // 시험 범위 이름·절 이름 — 한 장짜리 예전 기록은 parts가 없어서 chapter/from/to로 만든다
 function memoPartsOf(t){ return t.parts && t.parts.length ? t.parts : [{ chapter: t.chapter, from: t.from, to: t.to }]; }
@@ -1760,6 +1780,8 @@ async function openChapterTextModal(chapter){
   const modal = document.getElementById("chapter-text-modal");
   const body = document.getElementById("chapter-text-body");
   chapterTextOpenFor = chapter;
+  chapterAudio.stop();
+  chapterAudio.refresh();
   document.getElementById("chapter-text-title").textContent = `${REVELATION.book} ${chapter}장`;
   body.innerHTML = `<p class="form-note">불러오는 중…</p>`;
   modal.hidden = false;
@@ -1773,13 +1795,39 @@ async function openChapterTextModal(chapter){
   body.innerHTML = Array.from({ length: REVELATION.verses[chapter - 1] }, (_, i) => {
     const found = texts.find(t => t.verse === i + 1);
     return `
-      <div class="source-row">
+      <div class="source-row${found ? " is-playable" : ""}" data-verse="${i + 1}"${found ? ` title="${i + 1}절부터 듣기"` : ""}>
         <span class="verse-input-row__num">${i + 1}절</span>
         <div class="source-row__text${found ? "" : " is-missing"}">${found ? escapeHtml(found.text) : "아직 본문이 등록되지 않았어요"}</div>
       </div>`;
   }).join("");
 }
+// 장 전체 듣기 — 본문이 등록된 절만 차례로 읽는다
+const chapterTextVerses = () => Array.from(document.querySelectorAll("#chapter-text-body .source-row.is-playable"), r => Number(r.dataset.verse));
+const chapterAudio = MemoAudio.mount(document.getElementById("chapter-text-audio"), "chapter",
+  () => chapterTextOpenFor && { chapter: chapterTextOpenFor, verses: chapterTextVerses() },
+  verse => {
+    const body = document.getElementById("chapter-text-body");
+    body.querySelectorAll(".source-row.is-playing").forEach(r => r.classList.remove("is-playing"));
+    const row = verse && body.querySelector(`.source-row[data-verse="${verse}"]`);
+    if (row){
+      row.classList.add("is-playing");
+      // 읽는 줄이 창 밖이면 보이게 (창 안에서만 굴린다)
+      const top = row.offsetTop - body.offsetTop, bottom = top + row.offsetHeight;
+      if (top < body.scrollTop || bottom > body.scrollTop + body.clientHeight)
+        body.scrollTo({ top: Math.max(0, top - 12), behavior: "smooth" });
+    }
+  }, document.getElementById("chapter-text-play-slot"), true, // 제목 오른쪽 — 창 맨 위라 설정 상자는 아래로 연다
+  openMemoListenPick); // 듣기 범위도 시험 범위처럼 절 상자에서 고른다
+// 절을 누르면 그 절부터 읽는다
+document.getElementById("chapter-text-body").addEventListener("click", e => {
+  const row = e.target.closest(".source-row.is-playable");
+  if (!row || !chapterTextOpenFor) return;
+  const verses = chapterTextVerses();
+  chapterAudio.playFrom(chapterTextOpenFor, verses, verses.indexOf(Number(row.dataset.verse)));
+});
+
 function closeChapterTextModal(){
+  chapterAudio.stop();
   chapterTextOpenFor = null;
   document.getElementById("chapter-text-modal").hidden = true;
 }
@@ -1857,6 +1905,8 @@ async function getRevelationChapterText(chapter){
 
 // startMode: 본문을 불러온 뒤 처음 보여줄 상태 (기본은 본문 보기 — "바로 테스트"로 넘길 때는 "test")
 async function openMemoVerse(chapter, verse, startMode){
+  verseAudio.stop();
+  verseAudio.refresh();
   memoChapterNum = chapter;
   updateMemoVerseNav(chapter, verse);
   const open = memoOpen = { chapter, verse, text: "" };
@@ -1889,6 +1939,11 @@ async function openMemoVerse(chapter, verse, startMode){
 
 // 이전/다음 절 버튼 — 같은 장 안에서만. 없는 쪽 버튼은 자리는 그대로 두고 감춰서(visibility)
 // 남은 버튼이 좌우로 움직이지 않게 한다
+// 이 절 듣기
+const verseAudio = MemoAudio.mount(document.getElementById("memo-verse-audio"), "verse",
+  () => memoOpen && memoOpen.text && { chapter: memoOpen.chapter, verses: [memoOpen.verse] },
+  null, document.getElementById("memo-verse-play-slot"));
+
 function updateMemoVerseNav(chapter, verse){
   const last = REVELATION.verses[chapter - 1];
   const prev = document.getElementById("btn-memo-prev"), next = document.getElementById("btn-memo-next");
@@ -1927,6 +1982,9 @@ function setMemoMode(mode){
   memoMode = mode;
   const hidden = mode === "test" || mode === "result";
   document.getElementById("memo-verse-text").hidden = hidden;
+  document.getElementById("memo-verse-audio").hidden = mode !== "view"; // 테스트 중에는 듣기 막대·버튼을 감추고 멈춘다
+  document.getElementById("memo-verse-play-slot").hidden = mode !== "view";
+  if (mode !== "view") verseAudio.stop();
   document.getElementById("memo-test").hidden = mode !== "test";
   document.getElementById("memo-result").hidden = mode !== "result";
   document.getElementById("btn-memo-hide").hidden = mode !== "view";
