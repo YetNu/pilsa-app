@@ -17,7 +17,7 @@ const { REVELATION_TOTAL_VERSES, MEMO_DEFAULT_START_CHAPTER, isValidRevelationVe
 //        본인의 결과 목록은 지금 모드의 기록만 보여준다 (관리자 "암기 결과"는 시험/테스트를 나눠 모두 본다) — 켜져 있으면 암기 시험, 꺼져 있으면 암기 테스트
 // POST { action: "ackResults", ats: [제출시각…] }     → 본인: 받은 결과를 확인함 (기록은 남기고 "확인" 표시만)
 // GET  ?all=1                                        → 관리자: 모든 사람의 암기 시험·암기 테스트 기록 (암기 결과 — 기록마다 kind)
-// POST { action: "deleteTest", name, at }            → 관리자: 시험 기록 하나 지우기
+// POST { action: "deleteTest", name, at, kind }      → 관리자: 기록 하나 지우기 (kind: "exam" 암기시험 탭 | "practice" 암기테스트 탭)
 // GET 응답의 myTests: 내 시험 결과 (모두 결과까지)
 exports.handler = async (event) => {
   try {
@@ -70,7 +70,7 @@ exports.handler = async (event) => {
 
     if (action === "deleteTest"){
       requireAdmin(event);
-      const ok = await store.deleteMemoTest(String(name || ""), String(at || ""));
+      const ok = await store.deleteMemoTest(String(name || ""), String(at || ""), kind === "practice" ? "practice" : "exam");
       if (!ok) return json(404, { error: "기록을 찾을 수 없어요. 새로고침 후 다시 해주세요." });
       return json(200, { ok: true });
     }

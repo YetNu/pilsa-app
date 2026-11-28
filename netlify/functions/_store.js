@@ -8,9 +8,10 @@
 //   Config:      key | value   (start_date, open_until, memo_start_date, memo_start_chapter, memo_strict,
 //                                memo_review_on, memo_reviewer, pilsa_overrides, memo_overrides)
 //                pilsa_overrides / memo_overrides: 날짜별 배정 개수를 바꾼 것 {"YYYY-MM-DD": 개수} (JSON, 관리자 배정 달력)
-//   MemoTests:   이름 | 제출시각 | 장 | 시작절 | 끝절 | 답안(JSON) | 보냄 | 확인 | 범위(JSON) | 종류(exam·practice)  (범위 암기 테스트 기록 — 없으면 처음 쓸 때 자동 생성.
+//   MemoTests:   이름 | 제출시각 | 장 | 시작절 | 끝절 | 답안(JSON) | 보냄 | 확인 | 범위(JSON)  (시험 모드에서 낸 범위 암기 시험 기록 — 없으면 처음 쓸 때 자동 생성.
 //                여러 장에 걸친 시험이면 "범위"에 [{장, 시작절, 끝절}…]이 들어가고, 장·시작절·끝절은 첫 범위, 답안마다 장 번호가 붙는다.
 //                채점자에게 제출하면 보냄·확인이 비어 있다가, 채점자가 결과를 보내면 "보냄", 본인이 결과를 처음 열어 보면 "확인"에 시각)
+//   MemoPractice: MemoTests와 같은 열 — 시험 모드가 꺼졌을 때 채점한 "암기 테스트" 기록 (없으면 처음 쓸 때 자동 생성)
 //   Chapters:    책 | 장 | 절 | 내용   (관리자가 직접 입력하는 필사 원문 + 계시록 암기 본문)
 //   Memorize:    이름 | 장 | 절 | 완료 | 시각   (계시록 암기 체크 기록 — 없으면 처음 쓸 때 자동 생성)
 //   GachaSets:   번호 | 이름                    (뽑기 종류 — 비어 있으면 1번 "기본" 하나가 있는 것으로 본다)
@@ -26,7 +27,7 @@ const { getSheetsClient, SHEET_ID } = require("./_sheets");
    예전 시트에 영어 이름 탭이 남아 있으면 처음 접속할 때 한글 이름으로 자동으로 바꾼다 (안의 내용은 그대로). */
 const TAB_KO = {
   Users: "회원", Submissions: "필사제출", Config: "설정", Chapters: "본문",
-  Memorize: "암기체크", MemoTests: "암기시험",
+  Memorize: "암기체크", MemoTests: "암기시험", MemoPractice: "암기테스트",
   GachaSets: "뽑기종류", GachaItems: "뽑기항목", GachaTokens: "뽑기기회", GachaLog: "뽑기기록",
 };
 const tabTitle = key => TAB_KO[key] || key;
@@ -328,7 +329,8 @@ async function setChapterVerses(book, chapter, verses){
 // 읽을 때 탭이 없으면 빈 것으로 취급하고, 처음 쓸 때 탭과 헤더를 자동으로 만든다.
 const MEMO_SHEETS = {
   Memorize: ["이름", "장", "절", "완료", "시각"],
-  MemoTests: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인", "범위", "종류"],
+  MemoTests: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인", "범위"],
+  MemoPractice: ["이름", "제출시각", "장", "시작절", "끝절", "답안", "보냄", "확인", "범위"],
   GachaSets: ["번호", "이름"],
   GachaItems: ["종류", "항목", "뽑기번호"],
   GachaTokens: ["이름", "남은 횟수", "뽑기번호"],
@@ -441,15 +443,22 @@ async function setMemoCheck(name, chapter, verse, done){
   cacheClear("memoChecks");
 }
 
-/* ---------- 채점자에게 보낸 범위 암기 테스트 (MemoTests) ---------- */
+/* ---------- 범위 암기 기록 — 암기 시험(MemoTests) / 암기 테스트(MemoPractice) ---------- */
+// 시험 모드에서 낸 "암기 시험"은 암기시험 탭, 시험 모드가 꺼졌을 때 채점한 "암기 테스트"는 암기테스트 탭에 따로 쌓는다.
+// 두 탭의 열은 똑같다. kind: "exam" | "practice"
+const memoTab = kind => kind === "practice" ? "MemoPractice" : "MemoTests";
 
-// 반환: [{ name, at, chapter, from, to, answers: [{ verse, text }], sent, seen }] — 최근 것이 먼저
+// 반환: [{ name, at, chapter, from, to, answers: [{ verse, text }], sent, seen, kind }] — 탭마다 최근 것이 먼저
 // (sent: 결과를 받은 시각, seen: 본인이 결과를 확인한 시각 — 없으면 "")
 async function getMemoTests(){
   const sheets = await client();
+  const [exam, practice] = await Promise.all([readMemoTestTab(sheets, "exam"), readMemoTestTab(sheets, "practice")]);
+  return [...exam, ...practice];
+}
+async function readMemoTestTab(sheets, kind){
   // 예전 방식(values.append)이 A열이 아닌 엉뚱한 열에 붙여 둔 기록도 찾아낸다 — 이름 다음 칸이 제출시각이면 그 자리부터를 한 줄로 본다
   const isTime = v => /^\d{4}-\d{2}-\d{2}T/.test(String(v || ""));
-  const rows = (await readMemoRows(sheets, rng("MemoTests", "A2:Z"))).map(r => {
+  const rows = (await readMemoRows(sheets, rng(memoTab(kind), "A2:Z"))).map(r => {
     if (r[0]) return r;
     const c = r.findIndex((v, k) => v && !isTime(v) && isTime(r[k + 1]));
     return c > 0 ? r.slice(c) : r;
@@ -458,9 +467,7 @@ async function getMemoTests(){
     let answers = [], parts = null;
     try { answers = JSON.parse(r[5] || "[]"); } catch { /* 깨진 칸은 빈 답으로 */ }
     try { parts = r[8] ? JSON.parse(r[8]) : null; } catch { /* 깨진 칸은 한 장짜리로 */ }
-    // 종류: "exam"(시험 모드에서 낸 암기 시험) | "practice"(시험 모드가 꺼졌을 때 채점한 암기 테스트) — 예전 기록은 모두 시험
-    const test = { name: r[0], at: r[1], chapter: Number(r[2]), from: Number(r[3]), to: Number(r[4]), answers, sent: r[6] || "", seen: r[7] || "",
-      kind: r[9] === "practice" ? "practice" : "exam" };
+    const test = { name: r[0], at: r[1], chapter: Number(r[2]), from: Number(r[3]), to: Number(r[4]), answers, sent: r[6] || "", seen: r[7] || "", kind };
     if (Array.isArray(parts) && parts.length > 1) test.parts = parts;
     return test;
   }).reverse();
@@ -480,40 +487,43 @@ async function markMemoTestSent(name, at){
   return true;
 }
 
-// 본인이 받은 결과 창을 닫으면 "확인"에 시각만 남긴다 (기록은 지우지 않음) — 결과를 받은 본인 줄만
+// 본인이 받은 결과 창을 닫으면 "확인"에 시각만 남긴다 (기록은 지우지 않음) — 결과를 받은 본인 줄만, 두 탭 모두
 async function markMemoTestsSeen(name, ats){
   const sheets = await client();
-  const rows = await readMemoRows(sheets, rng("MemoTests", "A2:H"));
   const now = new Date().toISOString();
   const data = [];
-  rows.forEach((r, i) => {
-    if (r[0] !== name || !ats.includes(r[1]) || !r[6] || r[7]) return;
-    data.push({ range: rng("MemoTests", `H${i + 2}`), values: [[now]] });
-  });
+  for (const kind of ["exam", "practice"]){
+    const rows = await readMemoRows(sheets, rng(memoTab(kind), "A2:H"));
+    rows.forEach((r, i) => {
+      if (r[0] !== name || !ats.includes(r[1]) || !r[6] || r[7]) return;
+      data.push({ range: rng(memoTab(kind), `H${i + 2}`), values: [[now]] });
+    });
+  }
   if (data.length){ // 여러 줄이어도 한 번에 쓴다
     await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: "RAW", data } });
   }
   return data.length;
 }
 
-// 관리자: 시험 기록 한 줄 지우기 (이름 + 제출시각으로 찾음)
-async function deleteMemoTest(name, at){
+// 관리자: 기록 한 줄 지우기 (그 종류의 탭에서 이름 + 제출시각으로 찾음)
+async function deleteMemoTest(name, at, kind){
   const sheets = await client();
-  const rows = await readMemoRows(sheets, rng("MemoTests", "A2:B"));
+  const rows = await readMemoRows(sheets, rng(memoTab(kind), "A2:B"));
   const idx = rows.findIndex(r => r[0] === name && r[1] === at);
   if (idx === -1) return false;
-  await deleteDataRow(sheets, "MemoTests", idx);
+  await deleteDataRow(sheets, memoTab(kind), idx);
   return true;
 }
 
 async function addMemoTest(test){
   const sheets = await client();
-  await appendRows(sheets, "MemoTests", [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), test.sent || "", test.seen || "",
-    test.parts && test.parts.length > 1 ? JSON.stringify(test.parts) : "", test.kind === "practice" ? "practice" : "exam"]]);
+  const tab = memoTab(test.kind);
+  await appendRows(sheets, tab, [[test.name, test.at, test.chapter, test.from, test.to, JSON.stringify(test.answers), test.sent || "", test.seen || "",
+    test.parts && test.parts.length > 1 ? JSON.stringify(test.parts) : ""]]);
   // 정말 남았는지 다시 읽어 확인한다 — 남지 않았으면 "저장됨"이라고 거짓으로 알리지 않고 오류를 낸다
-  const saved = await readMemoRows(sheets, rng("MemoTests", "A2:B"));
+  const saved = await readMemoRows(sheets, rng(tab, "A2:B"));
   if (!saved.some(r => r[0] === test.name && r[1] === test.at)){
-    throw new Error("시험 기록이 시트에 저장되지 않았어요. 관리자에게 알려 주세요.");
+    throw new Error("기록이 시트에 저장되지 않았어요. 관리자에게 알려 주세요.");
   }
 }
 

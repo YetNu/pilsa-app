@@ -2287,7 +2287,7 @@ document.getElementById("memo-admin-list").addEventListener("click", async e => 
   if (!e.target.closest(".memo-admin-del")){ openAdminMemoDetail(t); return; }
   if (!(await showConfirmModal(`${t.name}님의 ${memoRangeLabel(memoPartsOf(t))} 기록을 지울까요?`, "지우기"))) return;
   try {
-    await api("/memorize", { method: "POST", body: { action: "deleteTest", name: t.name, at: t.at } });
+    await api("/memorize", { method: "POST", body: { action: "deleteTest", name: t.name, at: t.at, kind: t.kind } });
     memoAdminAll = memoAdminAll.filter(x => x !== t);
     applyMemoAdminKind();
     openAdminMemoPerson(memoAdminName);
