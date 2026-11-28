@@ -760,7 +760,7 @@ main{ position:relative; z-index:1; max-width: 760px; margin:0 auto; padding: 28
   font-size:1.2rem; line-height:1; cursor:pointer; box-shadow: var(--btn-shadow);
 }
 .memo-review-refresh:hover{ background: var(--head-bg); }
-/* 시험 결과 ↔ 테스트 결과: 제목 폭을 고정해서 ↻ 와 바꾸기 단추가 어느 쪽이든 같은 자리에 있게 */
+/* 시험 결과 ↔ 테스트 결과: 제목 폭을 고정해서 바꾸기 단추와 ↻ 가 어느 쪽이든 같은 자리에 있게 */
 #memo-review-title{ min-width:7em; }
 .memo-review-switch{
   width:64px; height:34px; border-radius:999px;
